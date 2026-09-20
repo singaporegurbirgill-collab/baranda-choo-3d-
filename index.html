@@ -32,7 +32,6 @@
       left: 0;
       z-index: 1;
     }
-    /* Safe Area Glassmorphism UI */
     #ui-layer {
       position: absolute;
       top: 0;
@@ -44,21 +43,21 @@
       display: flex;
       flex-direction: column;
       justify-content: space-between;
-      padding: env(safe-area-inset-top, 20px) 16px env(safe-area-inset-bottom, 20px) 16px;
+      padding: env(safe-area-inset-top, 24px) 16px env(safe-area-inset-bottom, 20px) 16px;
     }
     .hud-card {
       pointer-events: auto;
-      background: rgba(18, 22, 28, 0.75);
+      background: rgba(18, 22, 28, 0.85);
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
-      border: 1px solid rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.15);
       border-radius: 18px;
       padding: 12px 18px;
       color: #fff;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
     }
     .turn-chip {
       font-size: 14px;
@@ -89,24 +88,25 @@
       align-self: center;
       display: flex;
       gap: 12px;
-      background: rgba(18, 22, 28, 0.85);
+      background: rgba(18, 22, 28, 0.88);
       padding: 8px 14px;
       border-radius: 30px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
     }
     button {
-      background: rgba(255, 255, 255, 0.1);
-      border: 1px solid rgba(255, 255, 255, 0.15);
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.18);
       color: #fff;
       font-size: 12px;
       font-weight: 600;
-      padding: 8px 14px;
+      padding: 8px 16px;
       border-radius: 20px;
       cursor: pointer;
       pointer-events: auto;
-      transition: all 0.2s;
+      transition: transform 0.15s, background 0.15s;
     }
     button:active {
-      transform: scale(0.95);
+      transform: scale(0.94);
       background: rgba(255, 255, 255, 0.25);
     }
     #game-over-modal {
@@ -114,7 +114,7 @@
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      background: rgba(18, 22, 28, 0.95);
+      background: rgba(18, 22, 28, 0.96);
       border: 1px solid rgba(255, 255, 255, 0.2);
       border-radius: 24px;
       padding: 24px 32px;
@@ -125,16 +125,33 @@
       flex-direction: column;
       gap: 16px;
       z-index: 100;
-      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7);
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.8);
     }
     #game-over-modal h2 { font-size: 22px; font-weight: 800; }
     #game-over-modal p { font-size: 14px; color: #a0aab8; }
+    #debug-log {
+      display: none;
+      position: absolute;
+      top: 70px;
+      left: 16px;
+      right: 16px;
+      background: rgba(220, 38, 38, 0.9);
+      color: white;
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-family: monospace;
+      z-index: 1000;
+      word-break: break-all;
+    }
   </style>
-  <!-- Three.js + OrbitControls via unpkg -->
-  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
-  <script src="https://unpkg.com/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
+
+  <!-- Stable Three.js r128 + OrbitControls -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 </head>
 <body>
+  <div id="debug-log"></div>
   <div id="canvas-container"></div>
 
   <div id="ui-layer">
@@ -162,28 +179,28 @@
   </div>
 
   <script>
-    /* =========================================================================
-       1. TOPOLOGY & GAME ENGINE CORE
-       ========================================================================= */
+    window.onerror = function(msg, url, line) {
+      const errBox = document.getElementById('debug-log');
+      errBox.style.display = 'block';
+      errBox.innerHTML = `<b>Error:</b> ${msg}<br><small>Line ${line}</small>`;
+    };
+
+    /* --- 1. BOARD TOPOLOGY & ENGINE --- */
     const NODE_COUNT = 25;
     const SPACING = 2.4;
-
-    // Elevation tiers matching the mountain viaduct reference
     const ELEVATIONS = [
-      0.0, 0.4, 1.4, 0.4, 0.0, // Row 0
-      0.3, 0.9, 0.5, 0.9, 0.3, // Row 1
-      0.0, 0.5, 1.5, 0.5, 0.0, // Row 2 (Node 12 is center summit)
-      0.3, 0.9, 0.5, 0.9, 0.3, // Row 3
-      0.0, 0.4, 0.8, 0.4, 0.0  // Row 4
+      0.0, 0.4, 1.4, 0.4, 0.0,
+      0.3, 0.9, 0.5, 0.9, 0.3,
+      0.0, 0.5, 1.5, 0.5, 0.0,
+      0.3, 0.9, 0.5, 0.9, 0.3,
+      0.0, 0.4, 0.8, 0.4, 0.0
     ];
 
     const Adjacency = Array.from({ length: NODE_COUNT }, () => []);
     const JumpTable = Array.from({ length: NODE_COUNT }, () => []);
 
-    const drOrth = [-1, 1, 0, 0];
-    const dcOrth = [0, 0, -1, 1];
-    const drDiag = [-1, -1, 1, 1];
-    const dcDiag = [-1, 1, -1, 1];
+    const drOrth = [-1, 1, 0, 0], dcOrth = [0, 0, -1, 1];
+    const drDiag = [-1, -1, 1, 1], dcDiag = [-1, 1, -1, 1];
 
     for (let r = 0; r < 5; r++) {
       for (let c = 0; c < 5; c++) {
@@ -219,9 +236,10 @@
     class Engine {
       constructor() {
         this.board = new Uint8Array(NODE_COUNT);
-        this.currentTurn = 1; // 1 = Light, 2 = Dark
+        this.currentTurn = 1;
         this.p1Count = 12;
         this.p2Count = 12;
+        this.mandatoryCapture = true;
         this.reset();
       }
 
@@ -243,15 +261,13 @@
           if (this.board[i] !== player) continue;
           this.findJumpsRecursive(i, i, [i], new Set(), captures, opponent);
 
-          if (captures.length === 0) {
-            for (const target of Adjacency[i]) {
-              if (this.board[target] === 0) {
-                steps.push({ from: i, to: target, path: [i, target], captures: [] });
-              }
+          for (const target of Adjacency[i]) {
+            if (this.board[target] === 0) {
+              steps.push({ from: i, to: target, path: [i, target], captures: [] });
             }
           }
         }
-        return captures.length > 0 ? captures : steps;
+        return (this.mandatoryCapture && captures.length > 0) ? captures : (captures.length > 0 ? captures.concat(steps) : steps);
       }
 
       findJumpsRecursive(origin, current, path, capturedSet, results, opponent) {
@@ -262,9 +278,7 @@
               branched = true;
               capturedSet.add(jump.over);
               path.push(jump.to);
-
               this.findJumpsRecursive(origin, jump.to, path, capturedSet, results, opponent);
-
               path.pop();
               capturedSet.delete(jump.over);
             }
@@ -283,156 +297,145 @@
       applyMove(move) {
         this.board[move.to] = this.board[move.from];
         this.board[move.from] = 0;
-
         for (const cap of move.captures) {
           this.board[cap] = 0;
           if (this.currentTurn === 1) this.p2Count--;
           else this.p1Count--;
         }
-
         this.currentTurn = this.currentTurn === 1 ? 2 : 1;
       }
 
       checkResult() {
         if (this.p1Count === 0) return 2;
         if (this.p2Count === 0) return 1;
-        if (this.getLegalMoves(this.currentTurn).length === 0) {
-          return this.currentTurn === 1 ? 2 : 1;
-        }
-        return 0; // ongoing
+        if (this.getLegalMoves(this.currentTurn).length === 0) return this.currentTurn === 1 ? 2 : 1;
+        return 0;
       }
     }
 
-    /* =========================================================================
-       2. THREE.JS 3D SCENE & INTERACTION
-       ========================================================================= */
+    /* --- 2. THREE.JS SCENE SETUP & ADAPTIVE FOV --- */
     const container = document.getElementById('canvas-container');
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0c1017);
-    scene.fog = new THREE.FogExp2(0x0c1017, 0.035);
+    scene.background = new THREE.Color(0x10141d);
+    scene.fog = new THREE.FogExp2(0x10141d, 0.022);
 
     const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
-    camera.position.set(0, 14, 15);
+
+    function adjustCameraForOrientation() {
+      const isPortrait = window.innerWidth < window.innerHeight;
+      if (isPortrait) {
+        camera.fov = 60;
+        camera.position.set(0, 19, 18);
+      } else {
+        camera.fov = 45;
+        camera.position.set(0, 15, 16);
+      }
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+    }
+    adjustCameraForOrientation();
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     container.appendChild(renderer.domElement);
 
-    const controls = new THREE.OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.05;
-    controls.maxPolarAngle = Math.PI / 2.15;
-    controls.minDistance = 8;
-    controls.maxDistance = 24;
+    let controls = null;
+    if (typeof THREE.OrbitControls !== 'undefined') {
+      controls = new THREE.OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.06;
+      controls.maxPolarAngle = Math.PI / 2.2;
+      controls.minDistance = 8;
+      controls.maxDistance = 30;
+      controls.target.set(0, 0.6, 0);
+    }
 
-    // Lighting
-    const ambientLight = new THREE.AmbientLight(0xdde8f0, 0.8);
-    scene.add(ambientLight);
-
-    const dirLight = new THREE.DirectionalLight(0xfffaed, 1.8);
-    dirLight.position.set(8, 20, 10);
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x334155, 1.1));
+    const dirLight = new THREE.DirectionalLight(0xfffaed, 1.4);
+    dirLight.position.set(10, 22, 12);
     dirLight.castShadow = true;
-    dirLight.shadow.mapSize.width = 1024;
-    dirLight.shadow.mapSize.height = 1024;
     scene.add(dirLight);
 
-    // Materials
-    const stoneMat = new THREE.MeshStandardMaterial({ color: 0x4a5568, roughness: 0.85, metalness: 0.1 });
-    const p1Mat = new THREE.MeshStandardMaterial({ color: 0x86efac, roughness: 0.3, metalness: 0.2 }); // Jade Light
-    const p2Mat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.4, metalness: 0.8 }); // Obsidian Dark
-    const selectMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, emissive: 0xca8a04, roughness: 0.2 });
-    const viaductMat = new THREE.MeshStandardMaterial({ color: 0x2d3748, roughness: 0.9 });
+    const slab = new THREE.Mesh(
+      new THREE.BoxGeometry(13, 0.6, 13),
+      new THREE.MeshStandardMaterial({ color: 0x1e2634, roughness: 0.9 })
+    );
+    slab.position.y = -0.35;
+    scene.add(slab);
+
+    const stoneMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.75 });
+    const p1Mat = new THREE.MeshStandardMaterial({ color: 0x4ade80, roughness: 0.35 });
+    const p2Mat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.45 });
+    const viaductMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.85 });
 
     const nodePositions = [];
     const nodeMeshes = [];
     const pieceMeshes = new Map();
     const highlightRings = [];
 
-    // Build 25 Elevated Sockets & Bridge Viaducts
     for (let r = 0; r < 5; r++) {
       for (let c = 0; c < 5; c++) {
         const i = r * 5 + c;
-        const x = (c - 2) * SPACING;
-        const z = (r - 2) * SPACING;
-        const y = ELEVATIONS[i];
-        const pos = new THREE.Vector3(x, y, z);
+        const pos = new THREE.Vector3((c - 2) * SPACING, ELEVATIONS[i], (r - 2) * SPACING);
         nodePositions.push(pos);
 
-        // Platform cylinder
-        const geo = new THREE.CylinderGeometry(0.7, 0.75, 0.2, 16);
-        const mesh = new THREE.Mesh(geo, stoneMat);
+        const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.72, 0.76, 0.22, 16), stoneMat);
         mesh.position.copy(pos);
-        mesh.receiveShadow = true;
         mesh.userData = { nodeIndex: i };
         scene.add(mesh);
         nodeMeshes.push(mesh);
       }
     }
 
-    // Build Bridges
     const drawnLines = new Set();
     for (let i = 0; i < NODE_COUNT; i++) {
       for (const adj of Adjacency[i]) {
-        const min = Math.min(i, adj);
-        const max = Math.max(i, adj);
-        const key = `${min}-${max}`;
-        if (!drawnLines.has(key)) {
-          drawnLines.add(key);
-          const pA = nodePositions[min];
-          const pB = nodePositions[max];
-          const dist = pA.distanceTo(pB);
-          const bridgeGeo = new THREE.BoxGeometry(0.25, 0.1, dist);
-          const bridge = new THREE.Mesh(bridgeGeo, viaductMat);
-          const mid = new THREE.Vector3().addVectors(pA, pB).multiplyScalar(0.5);
-          bridge.position.copy(mid);
-          bridge.position.y -= 0.05;
+        const min = Math.min(i, adj), max = Math.max(i, adj);
+        if (!drawnLines.has(`${min}-${max}`)) {
+          drawnLines.add(`${min}-${max}`);
+          const pA = nodePositions[min], pB = nodePositions[max];
+          const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.12, pA.distanceTo(pB)), viaductMat);
+          bridge.position.copy(new THREE.Vector3().addVectors(pA, pB).multiplyScalar(0.5));
+          bridge.position.y -= 0.04;
           bridge.lookAt(pB);
-          bridge.receiveShadow = true;
           scene.add(bridge);
         }
       }
     }
 
-    /* =========================================================================
-       3. INTERACTION & GAME CONTROLLER
-       ========================================================================= */
+    /* --- 3. PIECES & ACCURATE TOUCH PICKING --- */
     const game = new Engine();
     let selectedNode = null;
     let availableMoves = [];
     let isAnimating = false;
     let vsComputer = true;
 
-    function createPieceMesh(owner) {
+    function createPieceMesh(owner, nodeIndex) {
       const group = new THREE.Group();
-      const baseGeo = new THREE.CylinderGeometry(0.42, 0.46, 0.25, 20);
-      const topGeo = new THREE.SphereGeometry(0.38, 16, 12);
-      topGeo.scale(1, 0.65, 1);
-
       const mat = owner === 1 ? p1Mat : p2Mat;
-      const base = new THREE.Mesh(baseGeo, mat);
-      const top = new THREE.Mesh(topGeo, mat);
-      top.position.y = 0.14;
-      base.castShadow = true;
-      top.castShadow = true;
-
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.46, 0.28, 18), mat);
+      const cap = new THREE.Mesh(new THREE.SphereGeometry(0.36, 16, 12), mat);
+      cap.position.y = 0.16;
       group.add(base);
-      group.add(top);
+      group.add(cap);
+
+      base.userData = { nodeIndex };
+      cap.userData = { nodeIndex };
+      group.userData = { nodeIndex };
       return group;
     }
 
     function spawnAllPieces() {
-      for (const [, mesh] of pieceMeshes) scene.remove(mesh);
+      pieceMeshes.forEach(mesh => scene.remove(mesh));
       pieceMeshes.clear();
-
       for (let i = 0; i < NODE_COUNT; i++) {
         const owner = game.board[i];
         if (owner !== 0) {
-          const piece = createPieceMesh(owner);
+          const piece = createPieceMesh(owner, i);
           piece.position.copy(nodePositions[i]);
-          piece.position.y += 0.15;
+          piece.position.y += 0.18;
           scene.add(piece);
           pieceMeshes.set(i, piece);
         }
@@ -441,29 +444,25 @@
     }
 
     function clearHighlights() {
-      for (const ring of highlightRings) scene.remove(ring);
+      highlightRings.forEach(ring => scene.remove(ring));
       highlightRings.length = 0;
     }
 
     function showHighlights(moves) {
       clearHighlights();
       for (const m of moves) {
-        const pos = nodePositions[m.to];
-        const ringGeo = new THREE.RingGeometry(0.5, 0.68, 24);
-        const ringMat = new THREE.MeshBasicMaterial({
-          color: m.captures.length > 0 ? 0xef4444 : 0x38bdf8,
-          side: THREE.DoubleSide
-        });
-        const ring = new THREE.Mesh(ringGeo, ringMat);
+        const ring = new THREE.Mesh(
+          new THREE.RingGeometry(0.52, 0.72, 24),
+          new THREE.MeshBasicMaterial({ color: m.captures.length > 0 ? 0xef4444 : 0x38bdf8, side: THREE.DoubleSide })
+        );
         ring.rotation.x = -Math.PI / 2;
-        ring.position.copy(pos);
-        ring.position.y += 0.12;
+        ring.position.copy(nodePositions[m.to]);
+        ring.position.y += 0.14;
         scene.add(ring);
         highlightRings.push(ring);
       }
     }
 
-    // Smooth parabolic jump animation
     function animateMovement(move, onDone) {
       isAnimating = true;
       const piece = pieceMeshes.get(move.from);
@@ -471,14 +470,17 @@
 
       const waypoints = move.path.map(idx => {
         const p = nodePositions[idx].clone();
-        p.y += 0.15;
+        p.y += 0.18;
         return p;
       });
 
       let stepIndex = 0;
       function step() {
         if (stepIndex >= waypoints.length - 1) {
+          piece.userData.nodeIndex = move.to;
+          piece.children.forEach(c => c.userData.nodeIndex = move.to);
           pieceMeshes.set(move.to, piece);
+
           for (const cap of move.captures) {
             const victim = pieceMeshes.get(cap);
             if (victim) {
@@ -491,54 +493,62 @@
           return;
         }
 
-        const start = waypoints[stepIndex];
-        const end = waypoints[stepIndex + 1];
-        const isJump = move.captures.length > 0;
-        const peak = isJump ? 1.0 : 0.4;
+        const start = waypoints[stepIndex], end = waypoints[stepIndex + 1];
+        const peak = move.captures.length > 0 ? 1.1 : 0.45;
         let progress = 0;
 
         function tween() {
-          progress += 0.055;
+          progress += 0.065;
           const t = Math.min(progress, 1);
           const current = new THREE.Vector3().lerpVectors(start, end, t);
           current.y += Math.sin(t * Math.PI) * peak;
           piece.position.copy(current);
 
-          if (t < 1) {
-            requestAnimationFrame(tween);
-          } else {
-            stepIndex++;
-            step();
-          }
+          if (t < 1) requestAnimationFrame(tween);
+          else { stepIndex++; step(); }
         }
         tween();
       }
       step();
     }
 
-    // Touch Raycaster
+    /* --- 4. TOUCH INPUT --- */
     const raycaster = new THREE.Raycaster();
-    const mouse = new THREE.Vector2();
+    const pointer = new THREE.Vector2();
+    let touchStartX = 0, touchStartY = 0;
 
-    function handlePointer(event) {
+    window.addEventListener('pointerdown', (e) => {
+      touchStartX = e.clientX;
+      touchStartY = e.clientY;
+    });
+
+    window.addEventListener('pointerup', (e) => {
+      if (e.target.closest('#ui-layer') || e.target.closest('#game-over-modal')) return;
+
+      const dist = Math.hypot(e.clientX - touchStartX, e.clientY - touchStartY);
+      if (dist > 22) return;
+
       if (isAnimating) return;
       if (vsComputer && game.currentTurn === 2) return;
 
-      const clientX = event.clientX || (event.touches && event.touches[0].clientX);
-      const clientY = event.clientY || (event.touches && event.touches[0].clientY);
-      if (!clientX || !clientY) return;
+      pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
+      pointer.y = -(e.clientY / window.innerHeight) * 2 + 1;
+      raycaster.setFromCamera(pointer, camera);
 
-      mouse.x = (clientX / window.innerWidth) * 2 - 1;
-      mouse.y = -(clientY / window.innerHeight) * 2 + 1;
-      raycaster.setFromCamera(mouse, camera);
+      const targetObjects = [...nodeMeshes];
+      pieceMeshes.forEach(mesh => {
+        mesh.children.forEach(child => targetObjects.push(child));
+      });
 
-      const intersects = raycaster.intersectObjects(nodeMeshes);
+      const intersects = raycaster.intersectObjects(targetObjects);
       if (intersects.length === 0) return;
 
-      const clickedIndex = intersects[0].object.userData.nodeIndex;
+      const hit = intersects[0].object;
+      const clickedIndex = hit.userData.nodeIndex;
+      if (clickedIndex === undefined) return;
+
       const clickedPieceOwner = game.board[clickedIndex];
 
-      // 1. Select Own Piece
       if (clickedPieceOwner === game.currentTurn) {
         selectedNode = clickedIndex;
         const allLegal = game.getLegalMoves(game.currentTurn);
@@ -548,7 +558,6 @@
         return;
       }
 
-      // 2. Submit Move
       if (selectedNode !== null) {
         const chosen = availableMoves.find(m => m.to === clickedIndex);
         if (chosen) {
@@ -560,19 +569,13 @@
             game.applyMove(chosen);
             updateHUD();
             const res = game.checkResult();
-            if (res !== 0) {
-              showGameOver(res);
-            } else if (vsComputer && game.currentTurn === 2) {
-              triggerAIMove();
-            }
+            if (res !== 0) showGameOver(res);
+            else if (vsComputer && game.currentTurn === 2) triggerAIMove();
           });
         }
       }
-    }
+    });
 
-    window.addEventListener('pointerdown', handlePointer);
-
-    // AI Worker: Minimax Depth 3
     function triggerAIMove() {
       setTimeout(() => {
         const moves = game.getLegalMoves(2);
@@ -581,10 +584,12 @@
           return;
         }
 
-        // Prioritize multi-jumps, then random best
-        moves.sort((a, b) => b.captures.length - a.captures.length);
-        const best = moves[0];
+        moves.sort((a, b) => {
+          if (b.captures.length !== a.captures.length) return b.captures.length - a.captures.length;
+          return Math.random() - 0.5;
+        });
 
+        const best = moves[0];
         animateMovement(best, () => {
           game.applyMove(best);
           updateHUD();
@@ -594,9 +599,7 @@
       }, 400);
     }
 
-    /* =========================================================================
-       4. UI HUD & VIEWPORT RESIZE
-       ========================================================================= */
+    /* --- 5. UI HUD & DYNAMIC RESIZE --- */
     const turnDot = document.getElementById('turn-dot');
     const turnText = document.getElementById('turn-text');
     const p1Score = document.getElementById('p1-score');
@@ -607,21 +610,24 @@
       p1Score.textContent = game.p1Count;
       p2Score.textContent = game.p2Count;
 
+      const allMoves = game.getLegalMoves(game.currentTurn);
+      const hasMandatoryCapture = allMoves.length > 0 && allMoves[0].captures.length > 0;
+
       if (game.currentTurn === 1) {
         turnDot.style.background = '#4ade80';
         turnDot.style.color = '#4ade80';
-        turnText.textContent = 'LIGHT TURN';
+        turnText.textContent = hasMandatoryCapture ? 'LIGHT (JUMP REQUIRED!)' : 'LIGHT TURN';
       } else {
         turnDot.style.background = '#94a3b8';
         turnDot.style.color = '#94a3b8';
-        turnText.textContent = vsComputer ? 'COMPUTER...' : 'DARK TURN';
+        turnText.textContent = vsComputer ? 'COMPUTER...' : (hasMandatoryCapture ? 'DARK (JUMP REQUIRED!)' : 'DARK TURN');
       }
     }
 
     function showGameOver(winner) {
       modal.style.display = 'flex';
       document.getElementById('modal-title').textContent = winner === 1 ? 'Light Triumph!' : 'Dark Triumph!';
-      document.getElementById('modal-desc').textContent = `Winner eliminated the opponent's forces.`;
+      document.getElementById('modal-desc').textContent = `Winner eliminated or locked the opposing forces.`;
     }
 
     document.getElementById('btn-restart').onclick = () => {
@@ -645,8 +651,7 @@
     };
 
     window.addEventListener('resize', () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
+      adjustCameraForOrientation();
       renderer.setSize(window.innerWidth, window.innerHeight);
     });
 
@@ -654,7 +659,7 @@
 
     function renderLoop() {
       requestAnimationFrame(renderLoop);
-      controls.update();
+      if (controls) controls.update();
       renderer.render(scene, camera);
     }
     renderLoop();

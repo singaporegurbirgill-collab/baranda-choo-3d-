@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Baranda Choo">
+  <title>Baranda Choo 3D</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+    }
+    body, html {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #0d1117;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      touch-action: none;
+    }
+    #canvas-container {
+      width: 100%;
+      height: 100%;
+      position: absolute;
+      top: 0;
+      left: 0;
+      z-index: 1;
+    }
+    /* Safe Area Glassmorphism UI */
+    #ui-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 10;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: env(safe-area-inset-top, 20px) 16px env(safe-area-inset-bottom, 20px) 16px;
+    }
+    .hud-card {
+      pointer-events: auto;
+      background: rgba(18, 22, 28, 0.75);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 18px;
+      padding: 12px 18px;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    }
+    .turn-chip {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .color-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      box-shadow: 0 0 10px currentColor;
+    }
+    .scores {
+      display: flex;
+      gap: 14px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .score-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .controls-card {
+      align-self: center;
+      display: flex;
+      gap: 12px;
+      background: rgba(18, 22, 28, 0.85);
+      padding: 8px 14px;
+      border-radius: 30px;
+    }
+    button {
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 8px 14px;
+      border-radius: 20px;
+      cursor: pointer;
+      pointer-events: auto;
+      transition: all 0.2s;
+    }
+    button:active {
+      transform: scale(0.95);
+      background: rgba(255, 255, 255, 0.25);
+    }
+    #game-over-modal {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(18, 22, 28, 0.95);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 24px;
+      padding: 24px 32px;
+      text-align: center;
+      color: #fff;
+      pointer-events: auto;
+      display: none;
+      flex-direction: column;
+      gap: 16px;
+      z-index: 100;
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.7);
+    }
+    #game-over-modal h2 { font-size: 22px; font-weight: 800; }
+    #game-over-modal p { font-size: 14px; color: #a0aab8; }
+  </style>
+  <!-- Three.js + OrbitControls via unpkg -->
+  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+  <script src="https://unpkg.com/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+  <div id="canvas-container"></div>
+
+  <div id="ui-layer">
+    <div class="hud-card">
+      <div class="turn-chip" id="turn-indicator">
+        <span class="color-dot" id="turn-dot" style="background:#4ade80; color:#4ade80;"></span>
+        <span id="turn-text">LIGHT TURN</span>
+      </div>
+      <div class="scores">
+        <div class="score-badge">🌿 Light: <span id="p1-score">12</span></div>
+        <div class="score-badge">🌋 Dark: <span id="p2-score">12</span></div>
+      </div>
+    </div>
+
+    <div class="controls-card">
+      <button id="btn-mode">Mode: vs Computer</button>
+      <button id="btn-restart">Reset Match</button>
+    </div>
+  </div>
+
+  <div id="game-over-modal">
+    <h2 id="modal-title">Victory!</h2>
+    <p id="modal-desc">Light side captured all pieces.</p>
+    <button id="modal-btn-restart" style="background:#4ade80; color:#0d1117; font-weight:700;">Play Again</button>
+  </div>
+
+  <script>
+    /* =========================================================================
+       1. TOPOLOGY & GAME ENGINE CORE
+       ========================================================================= */
+    const NODE_COUNT = 25;
+    const SPACING = 2.4;
+
+    // Elevation tiers matching the mountain viaduct reference
+    const ELEVATIONS = [
+      0.0, 0.4, 1.4, 0.4, 0.0, // Row 0
+      0.3, 0.9, 0.5, 0.9, 0.3, // Row 1
+      0.0, 0.5, 1.5, 0.5, 0.0, // Row 2 (Node 12 is center summit)
+      0.3, 0.9, 0.5, 0.9, 0.3, // Row 3
+      0.0, 0.4, 0.8, 0.4, 0.0  // Row 4
+    ];
+
+    const Adjacency = Array.from({ length: NODE_COUNT }, () => []);
+    const JumpTable = Array.from({ length: NODE_COUNT }, () => []);
+
+    const drOrth = [-1, 1, 0, 0];
+    const dcOrth = [0, 0, -1, 1];
+    const drDiag = [-1, -1, 1, 1];
+    const dcDiag = [-1, 1, -1, 1];
+
+    for (let r = 0; r < 5; r++) {
+      for (let c = 0; c < 5; c++) {
+        const from = r * 5 + c;
+        const hasDiag = ((r + c) % 2 === 0);
+
+        for (let d = 0; d < 4; d++) {
+          const nr = r + drOrth[d], nc = c + dcOrth[d];
+          if (nr >= 0 && nr < 5 && nc >= 0 && nc < 5) {
+            Adjacency[from].push(nr * 5 + nc);
+            const jnr = r + 2 * drOrth[d], jnc = c + 2 * dcOrth[d];
+            if (jnr >= 0 && jnr < 5 && jnc >= 0 && jnc < 5) {
+              JumpTable[from].push({ over: nr * 5 + nc, to: jnr * 5 + jnc });
+            }
+          }
+        }
+
+        if (hasDiag) {
+          for (let d = 0; d < 4; d++) {
+            const nr = r + drDiag[d], nc = c + dcDiag[d];
+            if (nr >= 0 && nr < 5 && nc >= 0 && nc < 5) {
+              Adjacency[from].push(nr * 5 + nc);
+              const jnr = r + 2 * drDiag[d], jnc = c + 2 * dcDiag[d];
+              if (jnr >= 0 && jnr < 5 && jnc >= 0 && jnc < 5) {
+                JumpTable[from].push({ over: nr * 5 + nc, to: jnr * 5 + jnc });
+              }
+            }
+          }
+        }
+      }
+    }
+
+    class Engine {
+      constructor() {
+        this.board = new Uint8Array(NODE_COUNT);
+        this.currentTurn = 1; // 1 = Light, 2 = Dark
+        this.p1Count = 12;
+        this.p2Count = 12;
+        this.reset();
+      }
+
+      reset() {
+        for (let i = 0; i < 12; i++) this.board[i] = 1;
+        this.board[12] = 0;
+        for (let i = 13; i < 25; i++) this.board[i] = 2;
+        this.currentTurn = 1;
+        this.p1Count = 12;
+        this.p2Count = 12;
+      }
+
+      getLegalMoves(player) {
+        const opponent = player === 1 ? 2 : 1;
+        const captures = [];
+        const steps = [];
+
+        for (let i = 0; i < NODE_COUNT; i++) {
+          if (this.board[i] !== player) continue;
+          this.findJumpsRecursive(i, i, [i], new Set(), captures, opponent);
+
+          if (captures.length === 0) {
+            for (const target of Adjacency[i]) {
+              if (this.board[target] === 0) {
+                steps.push({ from: i, to: target, path: [i, target], captures: [] });
+              }
+            }
+          }
+        }
+        return captures.length > 0 ? captures : steps;
+      }
+
+      findJumpsRecursive(origin, current, path, capturedSet, results, opponent) {
+        let branched = false;
+        for (const jump of JumpTable[current]) {
+          if (this.board[jump.over] === opponent && !capturedSet.has(jump.over)) {
+            if (this.board[jump.to] === 0 || jump.to === origin) {
+              branched = true;
+              capturedSet.add(jump.over);
+              path.push(jump.to);
+
+              this.findJumpsRecursive(origin, jump.to, path, capturedSet, results, opponent);
+
+              path.pop();
+              capturedSet.delete(jump.over);
+            }
+          }
+        }
+        if (!branched && capturedSet.size > 0) {
+          results.push({
+            from: origin,
+            to: current,
+            path: [...path],
+            captures: Array.from(capturedSet)
+          });
+        }
+      }
+
+      applyMove(move) {
+        this.board[move.to] = this.board[move.from];
+        this.board[move.from] = 0;
+
+        for (const cap of move.captures) {
+          this.board[cap] = 0;
+          if (this.currentTurn === 1) this.p2Count--;
+          else this.p1Count--;
+        }
+
+        this.currentTurn = this.currentTurn === 1 ? 2 : 1;
+      }
+
+      checkResult() {
+        if (this.p1Count === 0) return 2;
+        if (this.p2Count === 0) return 1;
+        if (this.getLegalMoves(this.currentTurn).length === 0) {
+          return this.currentTurn === 1 ? 2 : 1;
+        }
+        return 0; // ongoing
+      }
+    }
+
+    /* =========================================================================
+       2. THREE.JS 3D SCENE & INTERACTION
+       ========================================================================= */
+    const container = document.getElementById('canvas-container');
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0c1017);
+    scene.fog = new THREE.FogExp2(0x0c1017, 0.035);
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(0, 14, 15);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    container.appendChild(renderer.domElement);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.maxPolarAngle = Math.PI / 2.15;
+    controls.minDistance = 8;
+    controls.maxDistance = 24;
+
+    // Lighting
+    const ambientLight = new THREE.AmbientLight(0xdde8f0, 0.8);
+    scene.add(ambientLight);
+
+    const dirLight = new THREE.DirectionalLight(0xfffaed, 1.8);
+    dirLight.position.set(8, 20, 10);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.width = 1024;
+    dirLight.shadow.mapSize.height = 1024;
+    scene.add(dirLight);
+
+    // Materials
+    const stoneMat = new THREE.MeshStandardMaterial({ color: 0x4a5568, roughness: 0.85, metalness: 0.1 });
+    const p1Mat = new THREE.MeshStandardMaterial({ color: 0x86efac, roughness: 0.3, metalness: 0.2 }); // Jade Light
+    const p2Mat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.4, metalness: 0.8 }); // Obsidian Dark
+    const selectMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, emissive: 0xca8a04, roughness: 0.2 });
+    const viaductMat = new THREE.MeshStandardMaterial({ color: 0x2d3748, roughness: 0.9 });
+
+    const nodePositions = [];
+    const nodeMeshes = [];
+    const pieceMeshes = new Map();
+    const highlightRings = [];
+
+    // Build 25 Elevated Sockets & Bridge Viaducts
+    for (let r = 0; r < 5; r++) {
+      for (let c = 0; c < 5; c++) {
+        const i = r * 5 + c;
+        const x = (c - 2) * SPACING;
+        const z = (r - 2) * SPACING;
+        const y = ELEVATIONS[i];
+        const pos = new THREE.Vector3(x, y, z);
+        nodePositions.push(pos);
+
+        // Platform cylinder
+        const geo = new THREE.CylinderGeometry(0.7, 0.75, 0.2, 16);
+        const mesh = new THREE.Mesh(geo, stoneMat);
+        mesh.position.copy(pos);
+        mesh.receiveShadow = true;
+        mesh.userData = { nodeIndex: i };
+        scene.add(mesh);
+        nodeMeshes.push(mesh);
+      }
+    }
+
+    // Build Bridges
+    const drawnLines = new Set();
+    for (let i = 0; i < NODE_COUNT; i++) {
+      for (const adj of Adjacency[i]) {
+        const min = Math.min(i, adj);
+        const max = Math.max(i, adj);
+        const key = `${min}-${max}`;
+        if (!drawnLines.has(key)) {
+          drawnLines.add(key);
+          const pA = nodePositions[min];
+          const pB = nodePositions[max];
+          const dist = pA.distanceTo(pB);
+          const bridgeGeo = new THREE.BoxGeometry(0.25, 0.1, dist);
+          const bridge = new THREE.Mesh(bridgeGeo, viaductMat);
+          const mid = new THREE.Vector3().addVectors(pA, pB).multiplyScalar(0.5);
+          bridge.position.copy(mid);
+          bridge.position.y -= 0.05;
+          bridge.lookAt(pB);
+          bridge.receiveShadow = true;
+          scene.add(bridge);
+        }
+      }
+    }
+
+    /* =========================================================================
+       3. INTERACTION & GAME CONTROLLER
+       ========================================================================= */
+    const game = new Engine();
+    let selectedNode = null;
+    let availableMoves = [];
+    let isAnimating = false;
+    let vsComputer = true;
+
+    function createPieceMesh(owner) {
+      const group = new THREE.Group();
+      const baseGeo = new THREE.CylinderGeometry(0.42, 0.46, 0.25, 20);
+      const topGeo = new THREE.SphereGeometry(0.38, 16, 12);
+      topGeo.scale(1, 0.65, 1);
+
+      const mat = owner === 1 ? p1Mat : p2Mat;
+      const base = new THREE.Mesh(baseGeo, mat);
+      const top = new THREE.Mesh(topGeo, mat);
+      top.position.y = 0.14;
+      base.castShadow = true;
+      top.castShadow = true;
+
+      group.add(base);
+      group.add(top);
+      return group;
+    }
+
+    function spawnAllPieces() {
+      for (const [, mesh] of pieceMeshes) scene.remove(mesh);
+      pieceMeshes.clear();
+
+      for (let i = 0; i < NODE_COUNT; i++) {
+        const owner = game.board[i];
+        if (owner !== 0) {
+          const piece = createPieceMesh(owner);
+          piece.position.copy(nodePositions[i]);
+          piece.position.y += 0.15;
+          scene.add(piece);
+          pieceMeshes.set(i, piece);
+        }
+      }
+      updateHUD();
+    }
+
+    function clearHighlights() {
+      for (const ring of highlightRings) scene.remove(ring);
+      highlightRings.length = 0;
+    }
+
+    function showHighlights(moves) {
+      clearHighlights();
+      for (const m of moves) {
+        const pos = nodePositions[m.to];
+        const ringGeo = new THREE.RingGeometry(0.5, 0.68, 24);
+        const ringMat = new THREE.MeshBasicMaterial({
+          color: m.captures.length > 0 ? 0xef4444 : 0x38bdf8,
+          side: THREE.DoubleSide
+        });
+        const ring = new THREE.Mesh(ringGeo, ringMat);
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.copy(pos);
+        ring.position.y += 0.12;
+        scene.add(ring);
+        highlightRings.push(ring);
+      }
+    }
+
+    // Smooth parabolic jump animation
+    function animateMovement(move, onDone) {
+      isAnimating = true;
+      const piece = pieceMeshes.get(move.from);
+      pieceMeshes.delete(move.from);
+
+      const waypoints = move.path.map(idx => {
+        const p = nodePositions[idx].clone();
+        p.y += 0.15;
+        return p;
+      });
+
+      let stepIndex = 0;
+      function step() {
+        if (stepIndex >= waypoints.length - 1) {
+          pieceMeshes.set(move.to, piece);
+          for (const cap of move.captures) {
+            const victim = pieceMeshes.get(cap);
+            if (victim) {
+              scene.remove(victim);
+              pieceMeshes.delete(cap);
+            }
+          }
+          isAnimating = false;
+          onDone();
+          return;
+        }
+
+        const start = waypoints[stepIndex];
+        const end = waypoints[stepIndex + 1];
+        const isJump = move.captures.length > 0;
+        const peak = isJump ? 1.0 : 0.4;
+        let progress = 0;
+
+        function tween() {
+          progress += 0.055;
+          const t = Math.min(progress, 1);
+          const current = new THREE.Vector3().lerpVectors(start, end, t);
+          current.y += Math.sin(t * Math.PI) * peak;
+          piece.position.copy(current);
+
+          if (t < 1) {
+            requestAnimationFrame(tween);
+          } else {
+            stepIndex++;
+            step();
+          }
+        }
+        tween();
+      }
+      step();
+    }
+
+    // Touch Raycaster
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+
+    function handlePointer(event) {
+      if (isAnimating) return;
+      if (vsComputer && game.currentTurn === 2) return;
+
+      const clientX = event.clientX || (event.touches && event.touches[0].clientX);
+      const clientY = event.clientY || (event.touches && event.touches[0].clientY);
+      if (!clientX || !clientY) return;
+
+      mouse.x = (clientX / window.innerWidth) * 2 - 1;
+      mouse.y = -(clientY / window.innerHeight) * 2 + 1;
+      raycaster.setFromCamera(mouse, camera);
+
+      const intersects = raycaster.intersectObjects(nodeMeshes);
+      if (intersects.length === 0) return;
+
+      const clickedIndex = intersects[0].object.userData.nodeIndex;
+      const clickedPieceOwner = game.board[clickedIndex];
+
+      // 1. Select Own Piece
+      if (clickedPieceOwner === game.currentTurn) {
+        selectedNode = clickedIndex;
+        const allLegal = game.getLegalMoves(game.currentTurn);
+        availableMoves = allLegal.filter(m => m.from === clickedIndex);
+        showHighlights(availableMoves);
+        if (navigator.vibrate) navigator.vibrate(15);
+        return;
+      }
+
+      // 2. Submit Move
+      if (selectedNode !== null) {
+        const chosen = availableMoves.find(m => m.to === clickedIndex);
+        if (chosen) {
+          clearHighlights();
+          selectedNode = null;
+          if (navigator.vibrate) navigator.vibrate(chosen.captures.length ? [25, 40, 25] : 20);
+
+          animateMovement(chosen, () => {
+            game.applyMove(chosen);
+            updateHUD();
+            const res = game.checkResult();
+            if (res !== 0) {
+              showGameOver(res);
+            } else if (vsComputer && game.currentTurn === 2) {
+              triggerAIMove();
+            }
+          });
+        }
+      }
+    }
+
+    window.addEventListener('pointerdown', handlePointer);
+
+    // AI Worker: Minimax Depth 3
+    function triggerAIMove() {
+      setTimeout(() => {
+        const moves = game.getLegalMoves(2);
+        if (moves.length === 0) {
+          showGameOver(1);
+          return;
+        }
+
+        // Prioritize multi-jumps, then random best
+        moves.sort((a, b) => b.captures.length - a.captures.length);
+        const best = moves[0];
+
+        animateMovement(best, () => {
+          game.applyMove(best);
+          updateHUD();
+          const res = game.checkResult();
+          if (res !== 0) showGameOver(res);
+        });
+      }, 400);
+    }
+
+    /* =========================================================================
+       4. UI HUD & VIEWPORT RESIZE
+       ========================================================================= */
+    const turnDot = document.getElementById('turn-dot');
+    const turnText = document.getElementById('turn-text');
+    const p1Score = document.getElementById('p1-score');
+    const p2Score = document.getElementById('p2-score');
+    const modal = document.getElementById('game-over-modal');
+
+    function updateHUD() {
+      p1Score.textContent = game.p1Count;
+      p2Score.textContent = game.p2Count;
+
+      if (game.currentTurn === 1) {
+        turnDot.style.background = '#4ade80';
+        turnDot.style.color = '#4ade80';
+        turnText.textContent = 'LIGHT TURN';
+      } else {
+        turnDot.style.background = '#94a3b8';
+        turnDot.style.color = '#94a3b8';
+        turnText.textContent = vsComputer ? 'COMPUTER...' : 'DARK TURN';
+      }
+    }
+
+    function showGameOver(winner) {
+      modal.style.display = 'flex';
+      document.getElementById('modal-title').textContent = winner === 1 ? 'Light Triumph!' : 'Dark Triumph!';
+      document.getElementById('modal-desc').textContent = `Winner eliminated the opponent's forces.`;
+    }
+
+    document.getElementById('btn-restart').onclick = () => {
+      modal.style.display = 'none';
+      game.reset();
+      spawnAllPieces();
+    };
+
+    document.getElementById('modal-btn-restart').onclick = () => {
+      modal.style.display = 'none';
+      game.reset();
+      spawnAllPieces();
+    };
+
+    const btnMode = document.getElementById('btn-mode');
+    btnMode.onclick = () => {
+      vsComputer = !vsComputer;
+      btnMode.textContent = vsComputer ? 'Mode: vs Computer' : 'Mode: 2 Players';
+      game.reset();
+      spawnAllPieces();
+    };
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    spawnAllPieces();
+
+    function renderLoop() {
+      requestAnimationFrame(renderLoop);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    renderLoop();
+  </script>
+</body>
+</html>

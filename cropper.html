@@ -1,188 +1,665 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Piece Slicer</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Piece Slicer & PNG Exporter</title>
+  <!-- JSZip for 1-click batch ZIP export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0f1219;
+      --card-bg: #1a202c;
+      --border: #2d3748;
+      --accent: #10b981;
+      --accent-hover: #059669;
+      --text: #f3f4f6;
+      --muted: #9ca3af;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: #090e17;
-      color: #f8fafc;
-      padding: env(safe-area-inset-top, 24px) 16px env(safe-area-inset-bottom, 24px) 16px;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 20px 15px;
       display: flex;
       flex-direction: column;
       align-items: center;
-      min-height: 100vh;
     }
-    h1 { font-size: 20px; font-weight: 800; margin-bottom: 6px; text-align: center; }
-    p { font-size: 13px; color: #94a3b8; margin-bottom: 20px; text-align: center; max-width: 320px; }
+    header {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    header h1 {
+      font-size: 1.8rem;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+    header p {
+      color: var(--muted);
+      font-size: 0.95rem;
+      margin-top: 6px;
+    }
 
-    /* Tap Target for Mobile */
+    /* Uploader Area */
     .upload-box {
       width: 100%;
-      max-width: 400px;
-      background: #1e293b;
-      border: 2px dashed #38bdf8;
-      border-radius: 20px;
-      padding: 24px 16px;
+      max-width: 900px;
+      border: 2px dashed #4b5563;
+      border-radius: 12px;
+      padding: 30px 20px;
+      text-align: center;
+      background: var(--card-bg);
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      margin-bottom: 20px;
+    }
+    .upload-box:hover, .upload-box.dragover {
+      border-color: var(--accent);
+      background: #242c3d;
+    }
+    .upload-box input {
+      display: none;
+    }
+    .upload-icon {
+      font-size: 2.5rem;
+      margin-bottom: 8px;
+    }
+
+    /* Controls Bar */
+    .controls {
+      width: 100%;
+      max-width: 1100px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 20px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 15px;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .controls-group {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+    }
+    label {
+      font-size: 0.88rem;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    select, button, input[type="range"] {
+      font-size: 0.9rem;
+      padding: 8px 14px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: #273142;
+      color: #fff;
+      cursor: pointer;
+    }
+    button.btn-primary {
+      background: var(--accent);
+      border: none;
+      color: #fff;
+      font-weight: 600;
+      transition: background 0.2s;
+    }
+    button.btn-primary:hover {
+      background: var(--accent-hover);
+    }
+    .btn-secondary {
+      background: #374151;
+      border: none;
+    }
+    .btn-secondary:hover {
+      background: #4b5563;
+    }
+
+    /* Workspace */
+    .workspace {
+      width: 100%;
+      max-width: 1100px;
       display: flex;
       flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      margin-bottom: 24px;
-      cursor: pointer;
+      gap: 20px;
+    }
+    .editor-container {
       position: relative;
+      background: #000;
+      border-radius: 10px;
+      overflow: hidden;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      border: 1px solid var(--border);
+      touch-action: none;
     }
-    .upload-box input[type=file] {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      opacity: 0;
-      cursor: pointer;
+    canvas#editorCanvas {
+      max-width: 100%;
+      height: auto;
+      display: block;
+      cursor: crosshair;
     }
-    .upload-icon { font-size: 32px; }
-    .upload-text { font-size: 14px; font-weight: 700; color: #38bdf8; }
 
-    .grid {
+    /* Output Grid */
+    .output-section {
       width: 100%;
-      max-width: 460px;
+      max-width: 1100px;
+      margin-top: 15px;
+    }
+    .output-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .grid {
       display: grid;
-      grid-template-columns: repeat(2, 1fr);
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
       gap: 14px;
     }
-    .card {
-      background: #131d2e;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 16px;
-      padding: 12px;
+    .piece-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px;
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 10px;
+      text-align: center;
     }
-    .img-box {
+    .preview-bg {
       width: 100%;
       height: 140px;
-      background: #020617;
-      border-radius: 10px;
       display: flex;
       align-items: center;
       justify-content: center;
+      /* Checkerboard pattern to show PNG transparency */
+      background: repeating-conic-gradient(#2d3748 0% 25%, #1a202c 0% 50%) 50% / 16px 16px;
+      border-radius: 6px;
+      margin-bottom: 8px;
       overflow: hidden;
     }
-    img {
-      max-width: 90%;
-      max-height: 90%;
+    .piece-card img {
+      max-width: 100%;
+      max-height: 100%;
       object-fit: contain;
     }
-    .title {
-      font-size: 12px;
-      font-weight: 700;
-      color: #e2e8f0;
-      text-align: center;
-    }
-    .download-btn {
+    .piece-card .name {
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: #e5e7eb;
+      margin-bottom: 6px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
       width: 100%;
-      background: #38bdf8;
-      color: #04131f;
-      font-size: 11px;
-      font-weight: 700;
-      padding: 9px 0;
-      border-radius: 8px;
-      text-decoration: none;
-      text-align: center;
+    }
+    .piece-card button {
+      width: 100%;
+      font-size: 0.75rem;
+      padding: 5px 8px;
     }
   </style>
 </head>
 <body>
 
-  <h1>Piece Slicer & Exporter</h1>
-  <p>Select the reference sheet from your camera roll to slice all 12 pieces[span_3](start_span)[span_3](end_span)[span_4](start_span)[span_4](end_span).</p>
+  <header>
+    <h1>✂️ Piece Slicer & PNG Exporter</h1>
+    <p>Upload your sprite sheet to automatically slice, make transparent, and download all 12 pieces.</p>
+  </header>
 
-  <div class="upload-box">
+  <!-- Upload Area -->
+  <div class="upload-box" id="dropArea">
     <div class="upload-icon">📷</div>
-    <div class="upload-text">Tap Here to Choose Image from Photos</div>
-    <input type="file" id="file-input" accept="image/*">
+    <h3>Click or Drop Image Here</h3>
+    <p style="color: var(--muted); font-size: 0.85rem; margin-top: 4px;">Supports PNG, JPG, WebP from your files or camera roll</p>
+    <input type="file" id="fileInput" accept="image/*" />
   </div>
 
-  <div class="grid" id="output-grid"></div>
+  <!-- Controls -->
+  <div class="controls" id="controlsBar" style="display: none;">
+    <div class="controls-group">
+      <label>
+        Preset:
+        <select id="presetSelect">
+          <option value="wide">Wide Sheet (2 Rows × 6 Columns)</option>
+          <option value="vertical">Vertical Poster (Side A & Side B)</option>
+        </select>
+      </label>
+
+      <label>
+        <input type="checkbox" id="transparentToggle" checked />
+        Transparent BG
+      </label>
+
+      <label id="toleranceLabel">
+        Tolerance:
+        <input type="range" id="toleranceRange" min="5" max="80" value="28" />
+        <span id="toleranceVal">28</span>
+      </label>
+    </div>
+
+    <div class="controls-group">
+      <button class="btn-secondary" id="resetBoxesBtn">Reset Boxes</button>
+      <button class="btn-primary" id="downloadZipBtn">📦 Download All (.ZIP)</button>
+    </div>
+  </div>
+
+  <div class="workspace">
+    <!-- Interactive Canvas Editor -->
+    <div class="editor-container" id="editorContainer" style="display: none;">
+      <canvas id="editorCanvas"></canvas>
+    </div>
+
+    <!-- Live Sliced Cards -->
+    <div class="output-section" id="outputSection" style="display: none;">
+      <div class="output-header">
+        <h3>Sliced Pieces (<span id="pieceCount">0</span>)</h3>
+      </div>
+      <div class="grid" id="piecesGrid"></div>
+    </div>
+  </div>
 
   <script>
-    const pieces = [
-      { name: "SideA_Phoenix",  x: 0.02, y: 0.08, w: 0.30, h: 0.17 },
-      { name: "SideA_Golem",    x: 0.33, y: 0.08, w: 0.33, h: 0.17 },
-      { name: "SideA_TotemLg",  x: 0.77, y: 0.13, w: 0.22, h: 0.32 },
-      { name: "SideA_Ziggurat", x: 0.02, y: 0.27, w: 0.30, h: 0.19 },
-      { name: "SideA_Elephant", x: 0.33, y: 0.30, w: 0.32, h: 0.16 },
-      { name: "SideA_TotemSm",  x: 0.61, y: 0.27, w: 0.17, h: 0.19 },
-      { name: "SideB_Dragon",   x: 0.01, y: 0.52, w: 0.34, h: 0.16 },
-      { name: "SideB_Golem",    x: 0.35, y: 0.52, w: 0.30, h: 0.16 },
-      { name: "SideB_TotemLg",  x: 0.78, y: 0.58, w: 0.22, h: 0.32 },
-      { name: "SideB_Ziggurat", x: 0.03, y: 0.69, w: 0.28, h: 0.18 },
-      { name: "SideB_Rhino",    x: 0.32, y: 0.72, w: 0.33, h: 0.15 },
-      { name: "SideB_TotemSm",  x: 0.63, y: 0.67, w: 0.17, h: 0.20 }
+    // 12 Game Pieces metadata
+    const PIECE_NAMES = [
+      "white_jade_phoenix",
+      "white_stone_golem",
+      "white_ziggurat_tower",
+      "white_elephant_form",
+      "white_small_totem",
+      "white_large_totem",
+      "obsidian_dragon",
+      "dark_basalt_golem",
+      "dark_ziggurat_tower",
+      "dark_rhino",
+      "dark_charred_wood_totem",
+      "dark_large_totem"
     ];
 
-    const input = document.getElementById('file-input');
-    const grid = document.getElementById('output-grid');
+    // Presets in normalized percentages [x, y, w, h]
+    const PRESETS = {
+      wide: [
+        // Row 1: Light Pieces
+        [0.02, 0.05, 0.15, 0.40],
+        [0.18, 0.05, 0.15, 0.40],
+        [0.34, 0.05, 0.16, 0.40],
+        [0.50, 0.05, 0.16, 0.40],
+        [0.67, 0.05, 0.15, 0.40],
+        [0.83, 0.04, 0.14, 0.42],
+        // Row 2: Dark Pieces
+        [0.02, 0.52, 0.16, 0.42],
+        [0.18, 0.52, 0.16, 0.42],
+        [0.34, 0.52, 0.16, 0.42],
+        [0.50, 0.52, 0.16, 0.42],
+        [0.67, 0.52, 0.15, 0.42],
+        [0.83, 0.50, 0.14, 0.45]
+      ],
+      vertical: [
+        // Light Side
+        [0.03, 0.09, 0.28, 0.16],
+        [0.34, 0.09, 0.29, 0.16],
+        [0.04, 0.29, 0.30, 0.16],
+        [0.34, 0.30, 0.29, 0.14],
+        [0.62, 0.27, 0.18, 0.17],
+        [0.78, 0.13, 0.20, 0.31],
+        // Dark Side
+        [0.02, 0.52, 0.30, 0.16],
+        [0.34, 0.52, 0.29, 0.16],
+        [0.04, 0.70, 0.30, 0.16],
+        [0.34, 0.73, 0.30, 0.13],
+        [0.64, 0.68, 0.18, 0.18],
+        [0.79, 0.58, 0.20, 0.28]
+      ]
+    };
 
-    input.addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
+    let boxes = [];
+    let baseImage = null;
+    let selectedBoxIdx = -1;
+    let dragMode = null; // 'move' or handle: 'tl','tr','bl','br'
+    let dragStart = { x: 0, y: 0 };
+    let initialBox = null;
 
+    const fileInput = document.getElementById("fileInput");
+    const dropArea = document.getElementById("dropArea");
+    const canvas = document.getElementById("editorCanvas");
+    const ctx = canvas.getContext("2d");
+    const presetSelect = document.getElementById("presetSelect");
+    const transparentToggle = document.getElementById("transparentToggle");
+    const toleranceRange = document.getElementById("toleranceRange");
+    const toleranceVal = document.getElementById("toleranceVal");
+    const piecesGrid = document.getElementById("piecesGrid");
+    const pieceCount = document.getElementById("pieceCount");
+
+    // File Upload Handlers
+    dropArea.onclick = () => fileInput.click();
+    fileInput.onchange = (e) => {
+      if (e.target.files && e.target.files[0]) {
+        loadFile(e.target.files[0]);
+      }
+    };
+
+    dropArea.ondragover = (e) => {
+      e.preventDefault();
+      dropArea.classList.add("dragover");
+    };
+    dropArea.ondragleave = () => dropArea.classList.remove("dragover");
+    dropArea.ondrop = (e) => {
+      e.preventDefault();
+      dropArea.classList.remove("dragover");
+      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+        loadFile(e.dataTransfer.files[0]);
+      }
+    };
+
+    function loadFile(file) {
       const reader = new FileReader();
-      reader.onload = (event) => {
+      reader.onload = (ev) => {
         const img = new Image();
         img.onload = () => {
-          grid.innerHTML = '';
-          pieces.forEach(p => {
-            const sx = p.x * img.width;
-            const sy = p.y * img.height;
-            const sw = p.w * img.width;
-            const sh = p.h * img.height;
+          baseImage = img;
+          canvas.width = img.width;
+          canvas.height = img.height;
 
-            const canvas = document.createElement('canvas');
-            canvas.width = sw;
-            canvas.height = sh;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+          // Auto-select preset based on aspect ratio
+          const isWide = img.width > img.height * 1.3;
+          presetSelect.value = isWide ? "wide" : "vertical";
+          loadPreset(presetSelect.value);
 
-            const dataUrl = canvas.toDataURL('image/png');
+          document.getElementById("controlsBar").style.display = "flex";
+          document.getElementById("editorContainer").style.display = "flex";
+          document.getElementById("outputSection").style.display = "block";
 
-            const card = document.createElement('div');
-            card.className = 'card';
-
-            const imgBox = document.createElement('div');
-            imgBox.className = 'img-box';
-            const displayImg = document.createElement('img');
-            displayImg.src = dataUrl;
-            imgBox.appendChild(displayImg);
-
-            const title = document.createElement('div');
-            title.className = 'title';
-            title.innerText = p.name.replace('_', ' ');
-
-            const downloadLink = document.createElement('a');
-            downloadLink.className = 'download-btn';
-            downloadLink.download = `${p.name}.png`;
-            downloadLink.href = dataUrl;
-            downloadLink.innerText = 'Save PNG';
-
-            card.appendChild(imgBox);
-            card.appendChild(title);
-            card.appendChild(downloadLink);
-            grid.appendChild(card);
-          });
+          redraw();
+          sliceAndRenderGrid();
         };
-        img.src = event.target.result;
+        img.src = ev.target.result;
       };
       reader.readAsDataURL(file);
-    });
+    }
+
+    function loadPreset(key) {
+      const template = PRESETS[key] || PRESETS.wide;
+      boxes = template.map((b, i) => ({
+        id: i,
+        name: PIECE_NAMES[i] || `piece_${i + 1}`,
+        x: Math.round(b[0] * canvas.width),
+        y: Math.round(b[1] * canvas.height),
+        w: Math.round(b[2] * canvas.width),
+        h: Math.round(b[3] * canvas.height)
+      }));
+    }
+
+    presetSelect.onchange = () => {
+      loadPreset(presetSelect.value);
+      redraw();
+      sliceAndRenderGrid();
+    };
+
+    document.getElementById("resetBoxesBtn").onclick = () => {
+      loadPreset(presetSelect.value);
+      redraw();
+      sliceAndRenderGrid();
+    };
+
+    toleranceRange.oninput = (e) => {
+      toleranceVal.innerText = e.target.value;
+      sliceAndRenderGrid();
+    };
+
+    transparentToggle.onchange = () => {
+      document.getElementById("toleranceLabel").style.opacity = transparentToggle.checked ? "1" : "0.4";
+      sliceAndRenderGrid();
+    };
+
+    // Canvas drawing
+    function redraw() {
+      if (!baseImage) return;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(baseImage, 0, 0);
+
+      // Draw all bounding boxes
+      boxes.forEach((b, idx) => {
+        const isSelected = idx === selectedBoxIdx;
+        ctx.lineWidth = isSelected ? 4 : 2;
+        ctx.strokeStyle = isSelected ? "#10b981" : "rgba(255, 255, 255, 0.75)";
+        ctx.strokeRect(b.x, b.y, b.w, b.h);
+
+        // Fill highlight
+        ctx.fillStyle = isSelected ? "rgba(16, 185, 129, 0.15)" : "rgba(0, 0, 0, 0.2)";
+        ctx.fillRect(b.x, b.y, b.w, b.h);
+
+        // Label
+        ctx.fillStyle = "#fff";
+        ctx.font = "bold 14px sans-serif";
+        ctx.fillText(`${idx + 1}. ${b.name.replace(/_/g, ' ')}`, b.x + 5, b.y + 18);
+
+        // Handles for selected box
+        if (isSelected) {
+          const handles = getHandles(b);
+          ctx.fillStyle = "#10b981";
+          Object.values(handles).forEach(h => {
+            ctx.fillRect(h.x - 5, h.y - 5, 10, 10);
+          });
+        }
+      });
+    }
+
+    function getHandles(b) {
+      return {
+        tl: { x: b.x, y: b.y },
+        tr: { x: b.x + b.w, y: b.y },
+        bl: { x: b.x, y: b.y + b.h },
+        br: { x: b.x + b.w, y: b.y + b.h }
+      };
+    }
+
+    // Pointer event helpers
+    function getCanvasCoords(e) {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      return {
+        x: (e.clientX - rect.left) * scaleX,
+        y: (e.clientY - rect.top) * scaleY
+      };
+    }
+
+    canvas.onpointerdown = (e) => {
+      const { x, y } = getCanvasCoords(e);
+      dragMode = null;
+
+      // Check handle click if a box is selected
+      if (selectedBoxIdx >= 0) {
+        const b = boxes[selectedBoxIdx];
+        const handles = getHandles(b);
+        for (const [key, h] of Object.entries(handles)) {
+          if (Math.hypot(x - h.x, y - h.y) < 18) {
+            dragMode = key;
+            break;
+          }
+        }
+      }
+
+      // If not handle, check if clicked inside any box
+      if (!dragMode) {
+        selectedBoxIdx = -1;
+        for (let i = boxes.length - 1; i >= 0; i--) {
+          const b = boxes[i];
+          if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) {
+            selectedBoxIdx = i;
+            dragMode = "move";
+            break;
+          }
+        }
+      }
+
+      if (selectedBoxIdx >= 0) {
+        dragStart = { x, y };
+        initialBox = { ...boxes[selectedBoxIdx] };
+        canvas.setPointerCapture(e.pointerId);
+      }
+      redraw();
+    };
+
+    canvas.onpointermove = (e) => {
+      if (!dragMode || selectedBoxIdx < 0) return;
+      const { x, y } = getCanvasCoords(e);
+      const dx = x - dragStart.x;
+      const dy = y - dragStart.y;
+      const b = boxes[selectedBoxIdx];
+
+      if (dragMode === "move") {
+        b.x = Math.max(0, Math.min(canvas.width - b.w, initialBox.x + dx));
+        b.y = Math.max(0, Math.min(canvas.height - b.h, initialBox.y + dy));
+      } else if (dragMode === "br") {
+        b.w = Math.max(20, initialBox.w + dx);
+        b.h = Math.max(20, initialBox.h + dy);
+      } else if (dragMode === "tl") {
+        b.x = initialBox.x + dx;
+        b.y = initialBox.y + dy;
+        b.w = Math.max(20, initialBox.w - dx);
+        b.h = Math.max(20, initialBox.h - dy);
+      }
+      redraw();
+    };
+
+    canvas.onpointerup = (e) => {
+      if (dragMode) {
+        dragMode = null;
+        canvas.releasePointerCapture(e.pointerId);
+        sliceAndRenderGrid();
+      }
+    };
+
+    // Transparency Keying Logic
+    function processTransparency(sliceCtx, width, height, tolerance) {
+      const imgData = sliceCtx.getImageData(0, 0, width, height);
+      const data = imgData.data;
+
+      // Sample background color from corners
+      const bgR = (data[0] + data[(width - 1) * 4]) / 2;
+      const bgG = (data[1] + data[(width - 1) * 4 + 1]) / 2;
+      const bgB = (data[2] + data[(width - 1) * 4 + 2]) / 2;
+
+      const tolSq = tolerance * tolerance * 3.5;
+
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+
+        // Euclidean color distance from parchment/background color
+        const distSq = (r - bgR) ** 2 + (g - bgG) ** 2 + (b - bgB) ** 2;
+
+        if (distSq < tolSq) {
+          // Soft edge feathering
+          const alphaFactor = Math.max(0, Math.min(1, (distSq - tolSq * 0.7) / (tolSq * 0.3)));
+          data[i + 3] = Math.round(data[i + 3] * alphaFactor);
+        }
+      }
+      sliceCtx.putImageData(imgData, 0, 0);
+    }
+
+    // Slices all boxes & populates preview cards
+    function sliceAndRenderGrid() {
+      if (!baseImage) return;
+      piecesGrid.innerHTML = "";
+      pieceCount.innerText = boxes.length;
+
+      const makeTransparent = transparentToggle.checked;
+      const tol = parseInt(toleranceRange.value, 10);
+
+      boxes.forEach((b, idx) => {
+        const offscreen = document.createElement("canvas");
+        offscreen.width = Math.max(1, b.w);
+        offscreen.height = Math.max(1, b.h);
+        const sCtx = offscreen.getContext("2d");
+
+        sCtx.drawImage(baseImage, b.x, b.y, b.w, b.h, 0, 0, b.w, b.h);
+
+        if (makeTransparent) {
+          processTransparency(sCtx, b.w, b.h, tol);
+        }
+
+        const dataUrl = offscreen.toDataURL("image/png");
+
+        // Create UI Card
+        const card = document.createElement("div");
+        card.className = "piece-card";
+        card.innerHTML = `
+          <div class="preview-bg">
+            <img src="${dataUrl}" alt="${b.name}" />
+          </div>
+          <div class="name" title="${b.name}">${idx + 1}. ${b.name}</div>
+          <button class="btn-primary" onclick="downloadSingle('${dataUrl}', '${b.name}.png')">Download PNG</button>
+        `;
+        card.onclick = (e) => {
+          if (e.target.tagName !== "BUTTON") {
+            selectedBoxIdx = idx;
+            redraw();
+          }
+        };
+        piecesGrid.appendChild(card);
+      });
+    }
+
+    // Download Single PNG
+    window.downloadSingle = function (url, filename) {
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    };
+
+    // Download All as ZIP
+    document.getElementById("downloadZipBtn").onclick = async () => {
+      if (!baseImage) return;
+      const zip = new JSZip();
+      const makeTransparent = transparentToggle.checked;
+      const tol = parseInt(toleranceRange.value, 10);
+
+      boxes.forEach((b) => {
+        const offscreen = document.createElement("canvas");
+        offscreen.width = b.w;
+        offscreen.height = b.h;
+        const sCtx = offscreen.getContext("2d");
+        sCtx.drawImage(baseImage, b.x, b.y, b.w, b.h, 0, 0, b.w, b.h);
+
+        if (makeTransparent) {
+          processTransparency(sCtx, b.w, b.h, tol);
+        }
+
+        const dataUrl = offscreen.toDataURL("image/png");
+        const base64Data = dataUrl.replace(/^data:image\/png;base64,/, "");
+        zip.file(`${b.name}.png`, base64Data, { base64: true });
+      });
+
+      const blob = await zip.generateAsync({ type: "blob" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "game_pieces_png.zip";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    };
   </script>
 </body>
 </html>

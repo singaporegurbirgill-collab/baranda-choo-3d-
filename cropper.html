@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Piece Slicer</title>
+  <style>
+    body { font-family: sans-serif; background: #0f172a; color: white; padding: 20px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 16px; }
+    .card { background: #1e293b; padding: 10px; border-radius: 12px; text-align: center; }
+    canvas { width: 100%; border-radius: 8px; background: #020617; }
+    a { display: inline-block; margin-top: 8px; padding: 6px 12px; background: #38bdf8; color: #020617; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h2>Tap to Download Each Piece</h2>
+  <div class="grid" id="container"></div>
+
+  <script>
+    const pieces = [
+      { name: "SideA_Phoenix",  x: 0.02, y: 0.08, w: 0.30, h: 0.17 },
+      { name: "SideA_Golem",    x: 0.33, y: 0.08, w: 0.33, h: 0.17 },
+      { name: "SideA_TotemLg",  x: 0.77, y: 0.13, w: 0.22, h: 0.32 },
+      { name: "SideA_Ziggurat", x: 0.02, y: 0.27, w: 0.30, h: 0.19 },
+      { name: "SideA_Elephant", x: 0.33, y: 0.30, w: 0.32, h: 0.16 },
+      { name: "SideA_TotemSm",  x: 0.61, y: 0.27, w: 0.17, h: 0.19 },
+      { name: "SideB_Dragon",   x: 0.01, y: 0.52, w: 0.34, h: 0.16 },
+      { name: "SideB_Golem",    x: 0.35, y: 0.52, w: 0.30, h: 0.16 },
+      { name: "SideB_TotemLg",  x: 0.78, y: 0.58, w: 0.22, h: 0.32 },
+      { name: "SideB_Ziggurat", x: 0.03, y: 0.69, w: 0.28, h: 0.18 },
+      { name: "SideB_Rhino",    x: 0.32, y: 0.72, w: 0.33, h: 0.15 },
+      { name: "SideB_TotemSm",  x: 0.63, y: 0.67, w: 0.17, h: 0.20 }
+    ];
+
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.src = "pieces.png"; // Name of your uploaded reference image file
+
+    img.onload = () => {
+      const container = document.getElementById('container');
+      pieces.forEach(p => {
+        const card = document.createElement('div');
+        card.className = 'card';
+        const canvas = document.createElement('canvas');
+        canvas.width = p.w * img.width;
+        canvas.height = p.h * img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, p.x * img.width, p.y * img.height, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
+
+        const link = document.createElement('a');
+        link.download = `${p.name}.png`;
+        link.href = canvas.toDataURL();
+        link.innerText = `Save ${p.name}`;
+
+        card.appendChild(canvas);
+        card.appendChild(link);
+        container.appendChild(card);
+      });
+    };
+  </script>
+</body>
+</html>

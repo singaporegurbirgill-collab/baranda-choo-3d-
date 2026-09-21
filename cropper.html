@@ -1,19 +1,116 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Piece Slicer</title>
   <style>
-    body { font-family: sans-serif; background: #0f172a; color: white; padding: 20px; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 16px; }
-    .card { background: #1e293b; padding: 10px; border-radius: 12px; text-align: center; }
-    canvas { width: 100%; border-radius: 8px; background: #020617; }
-    a { display: inline-block; margin-top: 8px; padding: 6px 12px; background: #38bdf8; color: #020617; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 12px; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #090e17;
+      color: #f8fafc;
+      padding: env(safe-area-inset-top, 24px) 16px env(safe-area-inset-bottom, 24px) 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+    }
+    h1 { font-size: 20px; font-weight: 800; margin-bottom: 6px; text-align: center; }
+    p { font-size: 13px; color: #94a3b8; margin-bottom: 20px; text-align: center; max-width: 320px; }
+
+    /* Tap Target for Mobile */
+    .upload-box {
+      width: 100%;
+      max-width: 400px;
+      background: #1e293b;
+      border: 2px dashed #38bdf8;
+      border-radius: 20px;
+      padding: 24px 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 24px;
+      cursor: pointer;
+      position: relative;
+    }
+    .upload-box input[type=file] {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      opacity: 0;
+      cursor: pointer;
+    }
+    .upload-icon { font-size: 32px; }
+    .upload-text { font-size: 14px; font-weight: 700; color: #38bdf8; }
+
+    .grid {
+      width: 100%;
+      max-width: 460px;
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 14px;
+    }
+    .card {
+      background: #131d2e;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+    .img-box {
+      width: 100%;
+      height: 140px;
+      background: #020617;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    img {
+      max-width: 90%;
+      max-height: 90%;
+      object-fit: contain;
+    }
+    .title {
+      font-size: 12px;
+      font-weight: 700;
+      color: #e2e8f0;
+      text-align: center;
+    }
+    .download-btn {
+      width: 100%;
+      background: #38bdf8;
+      color: #04131f;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 9px 0;
+      border-radius: 8px;
+      text-decoration: none;
+      text-align: center;
+    }
   </style>
 </head>
 <body>
-  <h2>Tap to Download Each Piece</h2>
-  <div class="grid" id="container"></div>
+
+  <h1>Piece Slicer & Exporter</h1>
+  <p>Select the reference sheet from your camera roll to slice all 12 pieces[span_3](start_span)[span_3](end_span)[span_4](start_span)[span_4](end_span).</p>
+
+  <div class="upload-box">
+    <div class="upload-icon">📷</div>
+    <div class="upload-text">Tap Here to Choose Image from Photos</div>
+    <input type="file" id="file-input" accept="image/*">
+  </div>
+
+  <div class="grid" id="output-grid"></div>
 
   <script>
     const pieces = [
@@ -31,31 +128,61 @@
       { name: "SideB_TotemSm",  x: 0.63, y: 0.67, w: 0.17, h: 0.20 }
     ];
 
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.src = "pieces.png"; // Name of your uploaded reference image file
+    const input = document.getElementById('file-input');
+    const grid = document.getElementById('output-grid');
 
-    img.onload = () => {
-      const container = document.getElementById('container');
-      pieces.forEach(p => {
-        const card = document.createElement('div');
-        card.className = 'card';
-        const canvas = document.createElement('canvas');
-        canvas.width = p.w * img.width;
-        canvas.height = p.h * img.height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, p.x * img.width, p.y * img.height, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
+    input.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
 
-        const link = document.createElement('a');
-        link.download = `${p.name}.png`;
-        link.href = canvas.toDataURL();
-        link.innerText = `Save ${p.name}`;
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          grid.innerHTML = '';
+          pieces.forEach(p => {
+            const sx = p.x * img.width;
+            const sy = p.y * img.height;
+            const sw = p.w * img.width;
+            const sh = p.h * img.height;
 
-        card.appendChild(canvas);
-        card.appendChild(link);
-        container.appendChild(card);
-      });
-    };
+            const canvas = document.createElement('canvas');
+            canvas.width = sw;
+            canvas.height = sh;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, sx, sy, sw, sh, 0, 0, sw, sh);
+
+            const dataUrl = canvas.toDataURL('image/png');
+
+            const card = document.createElement('div');
+            card.className = 'card';
+
+            const imgBox = document.createElement('div');
+            imgBox.className = 'img-box';
+            const displayImg = document.createElement('img');
+            displayImg.src = dataUrl;
+            imgBox.appendChild(displayImg);
+
+            const title = document.createElement('div');
+            title.className = 'title';
+            title.innerText = p.name.replace('_', ' ');
+
+            const downloadLink = document.createElement('a');
+            downloadLink.className = 'download-btn';
+            downloadLink.download = `${p.name}.png`;
+            downloadLink.href = dataUrl;
+            downloadLink.innerText = 'Save PNG';
+
+            card.appendChild(imgBox);
+            card.appendChild(title);
+            card.appendChild(downloadLink);
+            grid.appendChild(card);
+          });
+        };
+        img.src = event.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
   </script>
 </body>
 </html>

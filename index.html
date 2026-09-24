@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>Baranda Choo 3D - Forest Canyon</title>
+  <title>Baranda Choo 3D - Forest Mountain</title>
   <style>
     * {
       box-sizing: border-box;
@@ -19,7 +19,7 @@
       width: 100%;
       height: 100%;
       overflow: hidden;
-      background-color: #0b1313;
+      background-color: #070e0e;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       touch-action: none;
     }
@@ -42,21 +42,21 @@
       display: flex;
       flex-direction: column;
       justify-content: space-between;
-      padding: env(safe-area-inset-top, 30px) 16px env(safe-area-inset-bottom, 24px) 16px;
+      padding: env(safe-area-inset-top, 34px) 16px env(safe-area-inset-bottom, 24px) 16px;
     }
     .hud-card {
       pointer-events: auto;
-      background: rgba(13, 22, 22, 0.85);
-      backdrop-filter: blur(18px);
-      -webkit-backdrop-filter: blur(18px);
-      border: 1px solid rgba(255, 255, 255, 0.15);
+      background: rgba(10, 18, 18, 0.88);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.16);
       border-radius: 20px;
       padding: 12px 18px;
       color: #fff;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.7);
     }
     .turn-chip {
       font-size: 13px;
@@ -82,11 +82,11 @@
       align-self: center;
       display: flex;
       gap: 12px;
-      background: rgba(13, 22, 22, 0.9);
-      padding: 8px 16px;
+      background: rgba(10, 18, 18, 0.92);
+      padding: 8px 18px;
       border-radius: 30px;
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
     }
     button {
       background: rgba(255, 255, 255, 0.1);
@@ -109,7 +109,7 @@
       top: 50%;
       left: 50%;
       transform: translate(-50%, -50%);
-      background: rgba(13, 22, 22, 0.96);
+      background: rgba(10, 18, 18, 0.96);
       border: 1px solid rgba(255, 255, 255, 0.2);
       border-radius: 24px;
       padding: 24px 32px;
@@ -120,8 +120,24 @@
       flex-direction: column;
       gap: 16px;
       z-index: 100;
-      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.8);
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.85);
     }
+    #legend-bar {
+      align-self: center;
+      display: flex;
+      gap: 12px;
+      background: rgba(10, 18, 18, 0.7);
+      padding: 4px 14px;
+      border-radius: 12px;
+      font-size: 11px;
+      color: #94a3b8;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      margin-bottom: 6px;
+    }
+    .legend-item { display: flex; align-items: center; gap: 5px; }
+    .dot-step { width: 8px; height: 8px; border-radius: 50%; background: #38bdf8; }
+    .dot-single { width: 8px; height: 8px; border-radius: 50%; background: #f59e0b; }
+    .dot-multi { width: 8px; height: 8px; border-radius: 50%; background: #ef4444; }
   </style>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -142,21 +158,28 @@
       </div>
     </div>
 
-    <div class="controls-card">
-      <button id="btn-mode">Mode: vs Computer</button>
-      <button id="btn-restart">Reset Match</button>
+    <div style="display:flex; flex-direction:column; align-items:center;">
+      <div id="legend-bar">
+        <div class="legend-item"><span class="dot-step"></span> Step</div>
+        <div class="legend-item"><span class="dot-single"></span> 1-Jump</div>
+        <div class="legend-item"><span class="dot-multi"></span> Chain-Jump</div>
+      </div>
+      <div class="controls-card">
+        <button id="btn-mode">Mode: vs Computer</button>
+        <button id="btn-restart">Reset Match</button>
+      </div>
     </div>
   </div>
 
   <div id="game-over-modal">
     <h2 id="modal-title">Victory!</h2>
-    <p id="modal-desc">All opposing pieces eliminated.</p>
-    <button id="modal-btn-restart" style="background:#4ade80; color:#0b1313; font-weight:700;">Play Again</button>
+    <p id="modal-desc">All opposing units defeated.</p>
+    <button id="modal-btn-restart" style="background:#4ade80; color:#070e0e; font-weight:700;">Play Again</button>
   </div>
 
   <script>
     /* =========================================================================
-       1. GAME RULES ENGINE (OPTIONAL CAPTURES ENABLED)
+       1. GAME RULES ENGINE (OPTIONAL CAPTURES & STRATEGIC 1-JUMP CHOICE)
        ========================================================================= */
     const NODE_COUNT = 25;
     const SPACING = 2.4;
@@ -225,46 +248,50 @@
         this.p2Count = 12;
       }
 
-      // FULL FREEDOM: Returns BOTH captures and simple steps without forcing jumps
+      // Returns all valid moves: simple steps, 1-jumps, and chained jumps
       getLegalMoves(player) {
         const opponent = player === 1 ? 2 : 1;
-        const captures = [];
-        const steps = [];
+        const moves = [];
 
         for (let i = 0; i < NODE_COUNT; i++) {
           if (this.board[i] !== player) continue;
-          this.findJumpsRecursive(i, i, [i], new Set(), captures, opponent);
 
+          // 1. Find all jumps (Every single intermediate jump is a legal stopping point!)
+          this.findJumpsRecursive(i, i, [i], new Set(), moves, opponent);
+
+          // 2. Find simple 1-step moves (optional captures enabled)
           for (const target of Adjacency[i]) {
             if (this.board[target] === 0) {
-              steps.push({ from: i, to: target, path: [i, target], captures: [] });
+              moves.push({ from: i, to: target, path: [i, target], captures: [] });
             }
           }
         }
-        return captures.concat(steps);
+        return moves;
       }
 
       findJumpsRecursive(origin, current, path, capturedSet, results, opponent) {
-        let branched = false;
         for (const jump of JumpTable[current]) {
           if (this.board[jump.over] === opponent && !capturedSet.has(jump.over)) {
             if (this.board[jump.to] === 0 || jump.to === origin) {
-              branched = true;
               capturedSet.add(jump.over);
               path.push(jump.to);
+
+              // EVERY landing spot is an independent legal choice!
+              // Player can stop after 1 jump even when a 2nd jump is available
+              results.push({
+                from: origin,
+                to: jump.to,
+                path: [...path],
+                captures: Array.from(capturedSet)
+              });
+
+              // Recurse to discover if further chained jumps can be continued
               this.findJumpsRecursive(origin, jump.to, path, capturedSet, results, opponent);
+
               path.pop();
               capturedSet.delete(jump.over);
             }
           }
-        }
-        if (!branched && capturedSet.size > 0) {
-          results.push({
-            from: origin,
-            to: current,
-            path: [...path],
-            captures: Array.from(capturedSet)
-          });
         }
       }
 
@@ -288,19 +315,19 @@
     }
 
     /* =========================================================================
-       2. THREE.JS ISOMETRIC ENVIRONMENT & LIGHTING
+       2. THREE.JS ISOMETRIC ENVIRONMENT (DIAMOND FRAMING)
        ========================================================================= */
     const container = document.getElementById('canvas-container');
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0c1919);
-    scene.fog = new THREE.FogExp2(0x0c1919, 0.024);
+    scene.background = new THREE.Color(0x091414);
+    scene.fog = new THREE.FogExp2(0x091414, 0.022);
 
     const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
 
     function setupIsometricCamera() {
-      // Classic 3/4 isometric perspective matching reference sheet
-      camera.position.set(16, 21, 16);
-      camera.lookAt(0, 0.8, 0);
+      // 3/4 Diamond Perspective directly framing North Peak at the top
+      camera.position.set(16, 20, 16);
+      camera.lookAt(0, 0.6, 0);
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
     }
@@ -319,84 +346,80 @@
     controls.maxPolarAngle = Math.PI / 2.15;
     controls.minDistance = 9;
     controls.maxDistance = 34;
-    controls.target.set(0, 0.8, 0);
+    controls.target.set(0, 0.6, 0);
 
-    // Warm Sun and Atmospheric Forest Fill
-    scene.add(new THREE.HemisphereLight(0xd1fae5, 0x064e3b, 1.2));
-    const sunLight = new THREE.DirectionalLight(0xfffae0, 1.8);
-    sunLight.position.set(16, 28, 14);
-    sunLight.castShadow = true;
-    sunLight.shadow.mapSize.width = 1024;
-    sunLight.shadow.mapSize.height = 1024;
-    scene.add(sunLight);
+    // Warm Sun and Ambient Forest Lighting
+    scene.add(new THREE.HemisphereLight(0xdcfce7, 0x064e3b, 1.25));
+    const sun = new THREE.DirectionalLight(0xfffae5, 1.8);
+    sun.position.set(18, 28, 14);
+    sun.castShadow = true;
+    sun.shadow.mapSize.width = 1024;
+    sun.shadow.mapSize.height = 1024;
+    scene.add(sun);
 
     /* =========================================================================
-       3. PROCEDURAL CANYON, TREES, & VIADUCT BRIDGES
+       3. CANYON, RIVER, CLIFF WALLS, & PROCEDURAL FOLIAGE
        ========================================================================= */
     const stoneMat = new THREE.MeshStandardMaterial({ color: 0x64748b, roughness: 0.85 });
-    const mossMat = new THREE.MeshStandardMaterial({ color: 0x3f6212, roughness: 0.9 });
+    const mossMat = new THREE.MeshStandardMaterial({ color: 0x365314, roughness: 0.9 });
     const pineMat = new THREE.MeshStandardMaterial({ color: 0x14532d, roughness: 0.8 });
     const woodMat = new THREE.MeshStandardMaterial({ color: 0x451a03, roughness: 0.9 });
-    const waterMat = new THREE.MeshStandardMaterial({ color: 0x0891b2, roughness: 0.1, metalness: 0.85 });
+    const waterMat = new THREE.MeshStandardMaterial({ color: 0x0891b2, roughness: 0.1, metalness: 0.8 });
     const wallMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.95 });
 
-    // Canyon Abyss & Chasm Floor
-    const canyonFloor = new THREE.Mesh(new THREE.BoxGeometry(22, 1, 22), mossMat);
+    // Deep Canyon Floor & River Stream
+    const canyonFloor = new THREE.Mesh(new THREE.BoxGeometry(24, 1, 24), mossMat);
     canyonFloor.position.y = -2.2;
     canyonFloor.receiveShadow = true;
     scene.add(canyonFloor);
 
-    // River Channel Cutting Through Chasm
-    const river = new THREE.Mesh(new THREE.PlaneGeometry(8, 22), waterMat);
+    const river = new THREE.Mesh(new THREE.PlaneGeometry(8, 24), waterMat);
     river.rotation.x = -Math.PI / 2;
     river.rotation.z = Math.PI / 4;
     river.position.y = -2.15;
     river.receiveShadow = true;
     scene.add(river);
 
-    // Outer Fortress Retaining Walls with Relief Carving Trim
-    const outerWall = new THREE.Mesh(new THREE.BoxGeometry(16.5, 2.5, 16.5), wallMat);
-    outerWall.position.y = -1.25;
-    outerWall.receiveShadow = true;
-    scene.add(outerWall);
+    // Carved Outer Retaining Wall with Relief Trim
+    const fortressWall = new THREE.Mesh(new THREE.BoxGeometry(16.8, 2.6, 16.8), wallMat);
+    fortressWall.position.y = -1.3;
+    fortressWall.receiveShadow = true;
+    scene.add(fortressWall);
 
-    // North Mountain Peak Crag behind Node 2
-    const mountainPeak = new THREE.Group();
-    const peak1 = new THREE.Mesh(new THREE.ConeGeometry(3.5, 7.5, 6), stoneMat);
-    peak1.position.set(0, 2.8, -8.5);
-    peak1.castShadow = true;
-    const peak2 = new THREE.Mesh(new THREE.ConeGeometry(2.5, 5.5, 5), mossMat);
-    peak2.position.set(-3.2, 1.8, -7.8);
-    peak2.castShadow = true;
-    mountainPeak.add(peak1, peak2);
-    scene.add(mountainPeak);
+    // North Mountain Peak Crags behind Node 2
+    const peakGroup = new THREE.Group();
+    const mainPeak = new THREE.Mesh(new THREE.ConeGeometry(3.6, 8.0, 6), stoneMat);
+    mainPeak.position.set(0, 3.2, -8.6);
+    mainPeak.castShadow = true;
+    const subPeak = new THREE.Mesh(new THREE.ConeGeometry(2.6, 5.8, 5), mossMat);
+    subPeak.position.set(-3.2, 2.0, -8.0);
+    subPeak.castShadow = true;
+    peakGroup.add(mainPeak, subPeak);
+    scene.add(peakGroup);
 
-    // Procedural Pine and Deciduous Forest Clusters
-    const forestGroup = new THREE.Group();
-    function plantPineTree(x, y, z, scale) {
-      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.12 * scale, 0.16 * scale, 1.2 * scale, 6), woodMat);
+    // Procedural Pine Trees
+    const forest = new THREE.Group();
+    function plantPine(x, y, z, scale) {
+      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.1 * scale, 0.15 * scale, 1.2 * scale, 6), woodMat);
       trunk.position.set(x, y + 0.6 * scale, z);
       trunk.castShadow = true;
-
-      const foliage = new THREE.Mesh(new THREE.ConeGeometry(0.9 * scale, 2.2 * scale, 6), pineMat);
+      const foliage = new THREE.Mesh(new THREE.ConeGeometry(0.85 * scale, 2.2 * scale, 6), pineMat);
       foliage.position.set(x, y + 1.8 * scale, z);
       foliage.castShadow = true;
-
-      forestGroup.add(trunk, foliage);
+      forest.add(trunk, foliage);
     }
 
-    // Populate Canyon Slopes with Foliage
-    for (let f = 0; f < 45; f++) {
-      const angle = (f / 45) * Math.PI * 2;
-      const radius = 6.8 + (f % 5) * 0.45;
-      const tx = Math.cos(angle) * radius;
-      const tz = Math.sin(angle) * radius;
-      if (tz < -5 && Math.abs(tx) < 2) continue; // Keep space clear for mountain peak
-      plantPineTree(tx, -2.0, tz, 0.7 + (f % 4) * 0.2);
+    for (let f = 0; f < 48; f++) {
+      const angle = (f / 48) * Math.PI * 2;
+      const dist = 7.0 + (f % 5) * 0.45;
+      const tx = Math.cos(angle) * dist;
+      const tz = Math.sin(angle) * dist;
+      if (tz < -5.5 && Math.abs(tx) < 2) continue;
+      plantPine(tx, -2.1, tz, 0.7 + (f % 4) * 0.2);
     }
-    scene.add(forestGroup);
+    scene.add(forest);
 
-    // Build 25 Elevated Octagonal Pedestals & Arched Bridges
+    // 25 Stepped Platforms & Solid Masonry Pillars
     const nodePositions = [];
     const nodeMeshes = [];
     const pieceMeshes = new Map();
@@ -408,10 +431,9 @@
         const pos = new THREE.Vector3((c - 2) * SPACING, ELEVATIONS[i], (r - 2) * SPACING);
         nodePositions.push(pos);
 
-        // Concentric Stepped Octagonal Dais
         const platform = new THREE.Group();
         const baseDais = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 1.05, 0.16, 8), stoneMat);
-        const topDais = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 0.85, 0.12, 8), mossMat);
+        const topDais = new THREE.Mesh(new THREE.CylinderGeometry(0.82, 0.86, 0.12, 8), mossMat);
         topDais.position.y = 0.12;
         platform.add(baseDais, topDais);
 
@@ -425,33 +447,31 @@
         scene.add(platform);
         nodeMeshes.push(topDais);
 
-        // Solid Stone Masonry Viaduct Pillar descending to Canyon Depth
+        // Solid Stone Viaduct Pillar descending to Canyon Floor
         const pillarDepth = pos.y + 2.2;
-        const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.7, pillarDepth, 8), stoneMat);
+        const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.68, pillarDepth, 8), stoneMat);
         pillar.position.set(pos.x, pos.y - pillarDepth / 2, pos.z);
         pillar.receiveShadow = true;
         scene.add(pillar);
       }
     }
 
-    // Build Arched Masonry Viaducts Connecting Platforms
-    const drawnLines = new Set();
+    // Arched Masonry Viaducts Connecting Nodes
+    const drawnBridges = new Set();
     for (let i = 0; i < NODE_COUNT; i++) {
       for (const adj of Adjacency[i]) {
         const min = Math.min(i, adj), max = Math.max(i, adj);
-        if (!drawnLines.has(`${min}-${max}`)) {
-          drawnLines.add(`${min}-${max}`);
+        if (!drawnBridges.has(`${min}-${max}`)) {
+          drawnBridges.add(`${min}-${max}`);
           const pA = nodePositions[min], pB = nodePositions[max];
           const dist = pA.distanceTo(pB);
 
           const bridgeGroup = new THREE.Group();
-          // Roadway deck
           const deck = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.14, dist), stoneMat);
-          // Arch belly under the bridge
-          const archBelly = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.28, dist * 0.75), wallMat);
-          archBelly.position.y = -0.16;
+          const arch = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.28, dist * 0.72), wallMat);
+          arch.position.y = -0.16;
 
-          bridgeGroup.add(deck, archBelly);
+          bridgeGroup.add(deck, arch);
           bridgeGroup.position.copy(new THREE.Vector3().addVectors(pA, pB).multiplyScalar(0.5));
           bridgeGroup.position.y -= 0.06;
           bridgeGroup.lookAt(pB);
@@ -462,7 +482,7 @@
     }
 
     /* =========================================================================
-       4. SCULPTED ASYMMETRIC PIECE MODELS
+       4. SCULPTED ASYMMETRIC FANTASY PIECES
        ========================================================================= */
     const jadeMat = new THREE.MeshStandardMaterial({ color: 0x10b981, roughness: 0.2, metalness: 0.1 });
     const sandstoneMat = new THREE.MeshStandardMaterial({ color: 0xd6d3d1, roughness: 0.65 });
@@ -475,14 +495,13 @@
       const isLight = (owner === 1);
       const primaryMat = isLight ? sandstoneMat : basaltMat;
       const specialMat = isLight ? jadeMat : obsidianMat;
-
       const c = nodeIndex % 5;
 
-      // 1. Apex Creature: Jade Phoenix (Side A, Node 2) / Obsidian Dragon (Side B, Node 22)
+      // 1. Apex Creature: Jade Phoenix (Node 2) / Obsidian Dragon (Node 22)
       if ((isLight && nodeIndex === 2) || (!isLight && nodeIndex === 22)) {
         const body = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.85, 5), specialMat);
         body.position.y = 0.45;
-        const wings = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.22, 0.18), bronzeAccent);
+        const wings = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.22, 0.18), bronzeAccent);
         wings.position.y = 0.55;
         const head = new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 8), specialMat);
         head.position.set(0, 0.9, 0.1);
@@ -497,7 +516,7 @@
           group.add(tier);
         }
       }
-      // 3. Winged Totem Poles (Corner columns: Column 0 & Column 4)
+      // 3. Winged Totem Poles (Corner Columns 0 & 4)
       else if (c === 0 || c === 4) {
         const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.24, 1.1, 8), primaryMat);
         pole.position.y = 0.55;
@@ -505,7 +524,7 @@
         crossWing.position.y = 0.85;
         group.add(pole, crossWing);
       }
-      // 4. Styne Golems (Heavy Stone Titans: Vanguard & Central line)
+      // 4. Styne Golems (Heavy Stone Titans)
       else {
         const legs = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.28, 0.35), primaryMat);
         legs.position.y = 0.14;
@@ -528,7 +547,7 @@
     }
 
     /* =========================================================================
-       5. GAME STATE & TOUCH INTERACTION (ANY PIECE CAN MOVE)
+       5. INTERACTION & GAME CONTROLLER
        ========================================================================= */
     const game = new Engine();
     let selectedNode = null;
@@ -561,14 +580,13 @@
     function showMoveDestinations(moves) {
       clearHighlights();
       for (const m of moves) {
-        // Red for capture leaps, Cyan for simple steps
-        const isCapture = m.captures.length > 0;
+        let ringColor = 0x38bdf8; // Cyan = Simple Step
+        if (m.captures.length === 1) ringColor = 0xf59e0b; // Amber = Single Jump (Tactical Stop)
+        else if (m.captures.length > 1) ringColor = 0xef4444; // Red = Multi-Jump Chain
+
         const ring = new THREE.Mesh(
           new THREE.RingGeometry(0.55, 0.78, 24),
-          new THREE.MeshBasicMaterial({
-            color: isCapture ? 0xef4444 : 0x38bdf8,
-            side: THREE.DoubleSide
-          })
+          new THREE.MeshBasicMaterial({ color: ringColor, side: THREE.DoubleSide })
         );
         ring.rotation.x = -Math.PI / 2;
         ring.position.copy(nodePositions[m.to]);
@@ -628,7 +646,7 @@
       step();
     }
 
-    /* --- TOUCH RAYCASTER (NO OVERLAP / BLEED-THROUGH) --- */
+    /* --- TOUCH RAYCASTER (ACCURATE HITBOXES) --- */
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
     let touchStartX = 0, touchStartY = 0;
@@ -659,12 +677,11 @@
 
       const owner = game.board[clickedIndex];
 
-      // Select piece if it belongs to current player
+      // 1. Select piece
       if (owner === game.currentTurn) {
         const allMoves = game.getLegalMoves(game.currentTurn);
         const legalForThisPiece = allMoves.filter(m => m.from === clickedIndex);
 
-        // Player can select any piece that has any move (step or jump)
         if (legalForThisPiece.length > 0) {
           selectedNode = clickedIndex;
           availableMoves = legalForThisPiece;
@@ -674,10 +691,15 @@
         return;
       }
 
-      // Move selected piece to empty platform
+      // 2. Move selected piece to chosen destination
       if (selectedNode !== null) {
-        const chosen = availableMoves.find(m => m.to === clickedIndex);
-        if (chosen) {
+        // If multiple moves lead to this node (e.g. 1-jump vs 2-jump), prefer the one matching the click
+        const matchingMoves = availableMoves.filter(m => m.to === clickedIndex);
+        if (matchingMoves.length > 0) {
+          // Sort to prioritize highest capture if ambiguity exists
+          matchingMoves.sort((a, b) => b.captures.length - a.captures.length);
+          const chosen = matchingMoves[0];
+
           clearHighlights();
           selectedNode = null;
           if (navigator.vibrate) navigator.vibrate(chosen.captures.length ? [25, 40, 25] : 20);
@@ -701,7 +723,7 @@
           return;
         }
 
-        // AI prefers captures if available, otherwise picks smart move
+        // AI prefers multi-jumps, then single jumps, then random steps
         moves.sort((a, b) => {
           if (b.captures.length !== a.captures.length) return b.captures.length - a.captures.length;
           return Math.random() - 0.5;
@@ -718,7 +740,7 @@
     }
 
     /* =========================================================================
-       6. UI CONTROLS & RENDER LOOP
+       6. UI HUD & CONTROLS
        ========================================================================= */
     const turnDot = document.getElementById('turn-dot');
     const turnText = document.getElementById('turn-text');
@@ -744,7 +766,7 @@
     function showGameOver(winner) {
       modal.style.display = 'flex';
       document.getElementById('modal-title').textContent = winner === 1 ? 'Light Triumph!' : 'Dark Triumph!';
-      document.getElementById('modal-desc').textContent = 'Opposing army eliminated or trapped.';
+      document.getElementById('modal-desc').textContent = 'Opposing forces eliminated or locked.';
     }
 
     document.getElementById('btn-restart').onclick = () => {

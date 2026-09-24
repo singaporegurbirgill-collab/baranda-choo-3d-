@@ -78,12 +78,36 @@
       font-size: 13px;
       font-weight: 600;
     }
+    .bottom-stack {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+    #btn-finish-turn {
+      display: none;
+      pointer-events: auto;
+      background: #f59e0b;
+      color: #070e0e;
+      font-size: 13px;
+      font-weight: 800;
+      padding: 10px 22px;
+      border-radius: 24px;
+      border: 1px solid #fbbf24;
+      box-shadow: 0 0 16px rgba(245, 158, 11, 0.6);
+      animation: pulse-btn 1.4s infinite;
+      cursor: pointer;
+    }
+    @keyframes pulse-btn {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
     .controls-card {
       align-self: center;
       display: flex;
-      gap: 12px;
+      gap: 8px;
       background: rgba(10, 18, 18, 0.92);
-      padding: 8px 18px;
+      padding: 8px 14px;
       border-radius: 30px;
       border: 1px solid rgba(255, 255, 255, 0.14);
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
@@ -92,10 +116,10 @@
       background: rgba(255, 255, 255, 0.1);
       border: 1px solid rgba(255, 255, 255, 0.18);
       color: #fff;
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 600;
-      padding: 8px 16px;
-      border-radius: 20px;
+      padding: 7px 13px;
+      border-radius: 18px;
       cursor: pointer;
       pointer-events: auto;
       transition: transform 0.15s, background 0.15s;
@@ -132,12 +156,10 @@
       font-size: 11px;
       color: #94a3b8;
       border: 1px solid rgba(255, 255, 255, 0.08);
-      margin-bottom: 6px;
     }
     .legend-item { display: flex; align-items: center; gap: 5px; }
     .dot-step { width: 8px; height: 8px; border-radius: 50%; background: #38bdf8; }
-    .dot-single { width: 8px; height: 8px; border-radius: 50%; background: #f59e0b; }
-    .dot-multi { width: 8px; height: 8px; border-radius: 50%; background: #ef4444; }
+    .dot-jump { width: 8px; height: 8px; border-radius: 50%; background: #f59e0b; }
   </style>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -158,14 +180,17 @@
       </div>
     </div>
 
-    <div style="display:flex; flex-direction:column; align-items:center;">
+    <div class="bottom-stack">
+      <button id="btn-finish-turn">Finish Turn (Stop Here)</button>
+
       <div id="legend-bar">
         <div class="legend-item"><span class="dot-step"></span> Step</div>
-        <div class="legend-item"><span class="dot-single"></span> 1-Jump</div>
-        <div class="legend-item"><span class="dot-multi"></span> Chain-Jump</div>
+        <div class="legend-item"><span class="dot-jump"></span> Jump (Chainable)</div>
       </div>
+
       <div class="controls-card">
         <button id="btn-mode">Mode: vs Computer</button>
+        <button id="btn-guide">Guide: ON</button>
         <button id="btn-restart">Reset Match</button>
       </div>
     </div>
@@ -179,18 +204,17 @@
 
   <script>
     /* =========================================================================
-       1. GAME RULES ENGINE (OPTIONAL CAPTURES & STRATEGIC 1-JUMP CHOICE)
+       1. GAME RULES ENGINE (UNLIMITED JUMPS, LOOPS, & STRATEGIC EARLY STOPS)
        ========================================================================= */
     const NODE_COUNT = 25;
     const SPACING = 2.4;
 
-    // Mountain Canyon elevation profile matching reference sheet
     const ELEVATIONS = [
-      0.0, 0.6, 2.0, 0.6, 0.0, // Row 0 (North Summit at Node 2)
-      0.4, 1.2, 0.7, 1.2, 0.4, // Row 1
-      0.0, 0.7, 2.2, 0.7, 0.0, // Row 2 (Central Summit Altar at Node 12)
-      0.4, 1.2, 0.7, 1.2, 0.4, // Row 3
-      0.0, 0.6, 1.0, 0.6, 0.0  // Row 4
+      0.0, 0.6, 2.0, 0.6, 0.0,
+      0.4, 1.2, 0.7, 1.2, 0.4,
+      0.0, 0.7, 2.2, 0.7, 0.0,
+      0.4, 1.2, 0.7, 1.2, 0.4,
+      0.0, 0.6, 1.0, 0.6, 0.0
     ];
 
     const Adjacency = Array.from({ length: NODE_COUNT }, () => []);
@@ -233,7 +257,7 @@
     class Engine {
       constructor() {
         this.board = new Uint8Array(NODE_COUNT);
-        this.currentTurn = 1; // 1 = Light, 2 = Dark
+        this.currentTurn = 1;
         this.p1Count = 12;
         this.p2Count = 12;
         this.reset();
@@ -241,14 +265,13 @@
 
       reset() {
         for (let i = 0; i < 12; i++) this.board[i] = 1;
-        this.board[12] = 0; // Central shrine initially empty
+        this.board[12] = 0;
         for (let i = 13; i < 25; i++) this.board[i] = 2;
         this.currentTurn = 1;
         this.p1Count = 12;
         this.p2Count = 12;
       }
 
-      // Returns all valid moves: simple steps, 1-jumps, and chained jumps
       getLegalMoves(player) {
         const opponent = player === 1 ? 2 : 1;
         const moves = [];
@@ -256,43 +279,81 @@
         for (let i = 0; i < NODE_COUNT; i++) {
           if (this.board[i] !== player) continue;
 
-          // 1. Find all jumps (Every single intermediate jump is a legal stopping point!)
-          this.findJumpsRecursive(i, i, [i], new Set(), moves, opponent);
+          // Temporarily vacate origin node during jump exploration
+          this.board[i] = 0;
+          this.findJumpsRecursive(i, i, [i], [], moves, opponent);
+          this.board[i] = player; // Restore
 
-          // 2. Find simple 1-step moves (optional captures enabled)
+          // 1-step moves
           for (const target of Adjacency[i]) {
             if (this.board[target] === 0) {
-              moves.push({ from: i, to: target, path: [i, target], captures: [] });
+              moves.push({
+                from: i,
+                to: target,
+                path: [i, target],
+                captures: []
+              });
             }
           }
         }
         return moves;
       }
 
-      findJumpsRecursive(origin, current, path, capturedSet, results, opponent) {
+      findJumpsRecursive(origin, current, path, capturedList, results, opponent) {
         for (const jump of JumpTable[current]) {
-          if (this.board[jump.over] === opponent && !capturedSet.has(jump.over)) {
-            if (this.board[jump.to] === 0 || jump.to === origin) {
-              capturedSet.add(jump.over);
-              path.push(jump.to);
+          const mid = jump.over;
+          const target = jump.to;
 
-              // EVERY landing spot is an independent legal choice!
-              // Player can stop after 1 jump even when a 2nd jump is available
+          if (this.board[mid] === opponent && !capturedList.includes(mid)) {
+            // Vacant if empty on simulated board and not current node
+            if (this.board[target] === 0 && target !== current) {
+              capturedList.push(mid);
+              path.push(target);
+
+              // Every landing spot is an independent legal choice!
               results.push({
                 from: origin,
-                to: jump.to,
+                to: target,
                 path: [...path],
-                captures: Array.from(capturedSet)
+                captures: [...capturedList]
               });
 
-              // Recurse to discover if further chained jumps can be continued
-              this.findJumpsRecursive(origin, jump.to, path, capturedSet, results, opponent);
+              // Mark captured mid as 0 in simulation
+              const prevMid = this.board[mid];
+              this.board[mid] = 0;
 
+              // Recurse to discover arbitrary chains and loops
+              this.findJumpsRecursive(origin, target, path, capturedList, results, opponent);
+
+              // Backtrack
+              this.board[mid] = prevMid;
               path.pop();
-              capturedSet.delete(jump.over);
+              capturedList.pop();
             }
           }
         }
+      }
+
+      // Query immediate single-jump options from an active node
+      getAvailableJumpsFrom(nodeIndex, player, alreadyCaptured = []) {
+        const opponent = player === 1 ? 2 : 1;
+        const jumps = [];
+        for (const jump of JumpTable[nodeIndex]) {
+          const mid = jump.over;
+          const target = jump.to;
+          if (this.board[mid] === opponent && !alreadyCaptured.includes(mid)) {
+            if (this.board[target] === 0 && target !== nodeIndex) {
+              jumps.push({
+                from: nodeIndex,
+                to: target,
+                over: mid,
+                path: [nodeIndex, target],
+                captures: [mid]
+              });
+            }
+          }
+        }
+        return jumps;
       }
 
       applyMove(move) {
@@ -306,6 +367,18 @@
         this.currentTurn = this.currentTurn === 1 ? 2 : 1;
       }
 
+      applySingleJump(from, to, over, player) {
+        this.board[to] = player;
+        this.board[from] = 0;
+        this.board[over] = 0;
+        if (player === 1) this.p2Count--;
+        else this.p1Count--;
+      }
+
+      endTurn() {
+        this.currentTurn = this.currentTurn === 1 ? 2 : 1;
+      }
+
       checkResult() {
         if (this.p1Count === 0) return 2;
         if (this.p2Count === 0) return 1;
@@ -315,7 +388,7 @@
     }
 
     /* =========================================================================
-       2. THREE.JS ISOMETRIC ENVIRONMENT (DIAMOND FRAMING)
+       2. THREE.JS ISOMETRIC ENVIRONMENT & LIGHTING
        ========================================================================= */
     const container = document.getElementById('canvas-container');
     const scene = new THREE.Scene();
@@ -325,7 +398,6 @@
     const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
 
     function setupIsometricCamera() {
-      // 3/4 Diamond Perspective directly framing North Peak at the top
       camera.position.set(16, 20, 16);
       camera.lookAt(0, 0.6, 0);
       camera.aspect = window.innerWidth / window.innerHeight;
@@ -348,7 +420,6 @@
     controls.maxDistance = 34;
     controls.target.set(0, 0.6, 0);
 
-    // Warm Sun and Ambient Forest Lighting
     scene.add(new THREE.HemisphereLight(0xdcfce7, 0x064e3b, 1.25));
     const sun = new THREE.DirectionalLight(0xfffae5, 1.8);
     sun.position.set(18, 28, 14);
@@ -367,7 +438,6 @@
     const waterMat = new THREE.MeshStandardMaterial({ color: 0x0891b2, roughness: 0.1, metalness: 0.8 });
     const wallMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.95 });
 
-    // Deep Canyon Floor & River Stream
     const canyonFloor = new THREE.Mesh(new THREE.BoxGeometry(24, 1, 24), mossMat);
     canyonFloor.position.y = -2.2;
     canyonFloor.receiveShadow = true;
@@ -380,13 +450,11 @@
     river.receiveShadow = true;
     scene.add(river);
 
-    // Carved Outer Retaining Wall with Relief Trim
     const fortressWall = new THREE.Mesh(new THREE.BoxGeometry(16.8, 2.6, 16.8), wallMat);
     fortressWall.position.y = -1.3;
     fortressWall.receiveShadow = true;
     scene.add(fortressWall);
 
-    // North Mountain Peak Crags behind Node 2
     const peakGroup = new THREE.Group();
     const mainPeak = new THREE.Mesh(new THREE.ConeGeometry(3.6, 8.0, 6), stoneMat);
     mainPeak.position.set(0, 3.2, -8.6);
@@ -397,7 +465,6 @@
     peakGroup.add(mainPeak, subPeak);
     scene.add(peakGroup);
 
-    // Procedural Pine Trees
     const forest = new THREE.Group();
     function plantPine(x, y, z, scale) {
       const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.1 * scale, 0.15 * scale, 1.2 * scale, 6), woodMat);
@@ -419,7 +486,6 @@
     }
     scene.add(forest);
 
-    // 25 Stepped Platforms & Solid Masonry Pillars
     const nodePositions = [];
     const nodeMeshes = [];
     const pieceMeshes = new Map();
@@ -447,7 +513,6 @@
         scene.add(platform);
         nodeMeshes.push(topDais);
 
-        // Solid Stone Viaduct Pillar descending to Canyon Floor
         const pillarDepth = pos.y + 2.2;
         const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.52, 0.68, pillarDepth, 8), stoneMat);
         pillar.position.set(pos.x, pos.y - pillarDepth / 2, pos.z);
@@ -456,7 +521,6 @@
       }
     }
 
-    // Arched Masonry Viaducts Connecting Nodes
     const drawnBridges = new Set();
     for (let i = 0; i < NODE_COUNT; i++) {
       for (const adj of Adjacency[i]) {
@@ -497,7 +561,7 @@
       const specialMat = isLight ? jadeMat : obsidianMat;
       const c = nodeIndex % 5;
 
-      // 1. Apex Creature: Jade Phoenix (Node 2) / Obsidian Dragon (Node 22)
+      // Apex Creature: Jade Phoenix (2) / Obsidian Dragon (22)
       if ((isLight && nodeIndex === 2) || (!isLight && nodeIndex === 22)) {
         const body = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.85, 5), specialMat);
         body.position.y = 0.45;
@@ -507,7 +571,7 @@
         head.position.set(0, 0.9, 0.1);
         group.add(body, wings, head);
       }
-      // 2. Stepped Ziggurat Pyramids (Nodes 1, 3, 21, 23)
+      // Stepped Ziggurat Pyramids (1, 3, 21, 23)
       else if (nodeIndex === 1 || nodeIndex === 3 || nodeIndex === 21 || nodeIndex === 23) {
         for (let t = 0; t < 4; t++) {
           const size = 0.72 - (t * 0.15);
@@ -516,7 +580,7 @@
           group.add(tier);
         }
       }
-      // 3. Winged Totem Poles (Corner Columns 0 & 4)
+      // Winged Totem Poles (0 & 4)
       else if (c === 0 || c === 4) {
         const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.24, 1.1, 8), primaryMat);
         pole.position.y = 0.55;
@@ -524,7 +588,7 @@
         crossWing.position.y = 0.85;
         group.add(pole, crossWing);
       }
-      // 4. Styne Golems (Heavy Stone Titans)
+      // Styne Golems (Heavy Stone Titans)
       else {
         const legs = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.28, 0.35), primaryMat);
         legs.position.y = 0.14;
@@ -547,13 +611,17 @@
     }
 
     /* =========================================================================
-       5. INTERACTION & GAME CONTROLLER
+       5. GAME FLOW & INTERACTION LOGIC (GUIDED / UNGUIDED & CHAIN STATE)
        ========================================================================= */
     const game = new Engine();
     let selectedNode = null;
     let availableMoves = [];
     let isAnimating = false;
     let vsComputer = true;
+    let isGuided = true; // Guided Mode vs Unguided Mode
+
+    // Interactive multi-jump chain tracker
+    let activeChain = null; // { currentNode, captured: [], jumps: [] }
 
     function spawnAllPieces() {
       pieceMeshes.forEach(mesh => scene.remove(mesh));
@@ -579,10 +647,11 @@
 
     function showMoveDestinations(moves) {
       clearHighlights();
+      if (!isGuided) return; // UNGUIDED MODE: Zero highlight rings!
+
       for (const m of moves) {
-        let ringColor = 0x38bdf8; // Cyan = Simple Step
-        if (m.captures.length === 1) ringColor = 0xf59e0b; // Amber = Single Jump (Tactical Stop)
-        else if (m.captures.length > 1) ringColor = 0xef4444; // Red = Multi-Jump Chain
+        const isJump = m.captures.length > 0;
+        const ringColor = isJump ? 0xf59e0b : 0x38bdf8; // Amber for jump, Cyan for step
 
         const ring = new THREE.Mesh(
           new THREE.RingGeometry(0.55, 0.78, 24),
@@ -646,7 +715,25 @@
       step();
     }
 
-    /* --- TOUCH RAYCASTER (ACCURATE HITBOXES) --- */
+    const btnFinishTurn = document.getElementById('btn-finish-turn');
+
+    function finishActiveChain() {
+      if (!activeChain) return;
+      activeChain = null;
+      btnFinishTurn.style.display = 'none';
+      clearHighlights();
+      selectedNode = null;
+      game.endTurn();
+      updateHUD();
+
+      const res = game.checkResult();
+      if (res !== 0) showGameOver(res);
+      else if (vsComputer && game.currentTurn === 2) triggerAIMove();
+    }
+
+    btnFinishTurn.onclick = finishActiveChain;
+
+    /* --- TOUCH RAYCASTER (HANDLES STEP-BY-STEP MULTI-JUMPS & UNGUIDED SELECTION) --- */
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
     let touchStartX = 0, touchStartY = 0;
@@ -675,42 +762,120 @@
       const clickedIndex = intersects[0].object.userData.nodeIndex;
       if (clickedIndex === undefined) return;
 
-      const owner = game.board[clickedIndex];
+      // 1. IN THE MIDDLE OF A MULTI-JUMP CHAIN?
+      if (activeChain !== null) {
+        // Tapping the active piece stops the chain early
+        if (clickedIndex === activeChain.currentNode) {
+          finishActiveChain();
+          return;
+        }
 
-      // 1. Select piece
-      if (owner === game.currentTurn) {
-        const allMoves = game.getLegalMoves(game.currentTurn);
-        const legalForThisPiece = allMoves.filter(m => m.from === clickedIndex);
+        // Check if clicked node is a legal next jump
+        const nextJump = activeChain.jumps.find(j => j.to === clickedIndex);
+        if (nextJump) {
+          clearHighlights();
+          animateMovement(nextJump, () => {
+            game.applySingleJump(nextJump.from, nextJump.to, nextJump.over, game.currentTurn);
+            activeChain.captured.push(nextJump.over);
+            activeChain.currentNode = nextJump.to;
 
-        if (legalForThisPiece.length > 0) {
-          selectedNode = clickedIndex;
-          availableMoves = legalForThisPiece;
-          showMoveDestinations(availableMoves);
-          if (navigator.vibrate) navigator.vibrate(15);
+            // Check if further jumps exist from this new landing spot
+            const furtherJumps = game.getAvailableJumpsFrom(nextJump.to, game.currentTurn, activeChain.captured);
+
+            if (furtherJumps.length > 0) {
+              activeChain.jumps = furtherJumps;
+              btnFinishTurn.style.display = 'block';
+              showMoveDestinations(furtherJumps);
+            } else {
+              // No further jumps available - turn automatically completes
+              finishActiveChain();
+            }
+          });
         }
         return;
       }
 
-      // 2. Move selected piece to chosen destination
+      const owner = game.board[clickedIndex];
+
+      // 2. SELECT OWN PIECE (NEW MOVE)
+      if (owner === game.currentTurn) {
+        selectedNode = clickedIndex;
+
+        // In Guided mode, compute legal immediate moves (steps and first-leg jumps)
+        const steps = [];
+        for (const target of Adjacency[clickedIndex]) {
+          if (game.board[target] === 0) {
+            steps.push({ from: clickedIndex, to: target, path: [clickedIndex, target], captures: [] });
+          }
+        }
+        const initialJumps = game.getAvailableJumpsFrom(clickedIndex, game.currentTurn, []);
+        availableMoves = initialJumps.concat(steps);
+
+        showMoveDestinations(availableMoves);
+        if (navigator.vibrate) navigator.vibrate(15);
+        return;
+      }
+
+      // 3. EXECUTE MOVE TO TARGET PLATFORM
       if (selectedNode !== null) {
-        // If multiple moves lead to this node (e.g. 1-jump vs 2-jump), prefer the one matching the click
-        const matchingMoves = availableMoves.filter(m => m.to === clickedIndex);
-        if (matchingMoves.length > 0) {
-          // Sort to prioritize highest capture if ambiguity exists
-          matchingMoves.sort((a, b) => b.captures.length - a.captures.length);
-          const chosen = matchingMoves[0];
+        // Check legal moves from selected piece
+        const steps = [];
+        for (const target of Adjacency[selectedNode]) {
+          if (game.board[target] === 0) {
+            steps.push({ from: selectedNode, to: target, path: [selectedNode, target], captures: [] });
+          }
+        }
+        const initialJumps = game.getAvailableJumpsFrom(selectedNode, game.currentTurn, []);
+        const allPossible = initialJumps.concat(steps);
 
+        const chosen = allPossible.find(m => m.to === clickedIndex);
+        if (chosen) {
           clearHighlights();
-          selectedNode = null;
-          if (navigator.vibrate) navigator.vibrate(chosen.captures.length ? [25, 40, 25] : 20);
 
-          animateMovement(chosen, () => {
-            game.applyMove(chosen);
-            updateHUD();
-            const res = game.checkResult();
-            if (res !== 0) showGameOver(res);
-            else if (vsComputer && game.currentTurn === 2) triggerAIMove();
-          });
+          // Case A: Simple 1-Step Move
+          if (chosen.captures.length === 0) {
+            selectedNode = null;
+            if (navigator.vibrate) navigator.vibrate(20);
+
+            animateMovement(chosen, () => {
+              game.applyMove(chosen);
+              updateHUD();
+              const res = game.checkResult();
+              if (res !== 0) showGameOver(res);
+              else if (vsComputer && game.currentTurn === 2) triggerAIMove();
+            });
+          }
+          // Case B: Jump Capture (Start chain)
+          else {
+            if (navigator.vibrate) navigator.vibrate([25, 40, 25]);
+            animateMovement(chosen, () => {
+              game.applySingleJump(chosen.from, chosen.to, chosen.over, game.currentTurn);
+              const captured = [chosen.over];
+
+              // Check if further jumps exist
+              const nextJumps = game.getAvailableJumpsFrom(chosen.to, game.currentTurn, captured);
+
+              if (nextJumps.length > 0) {
+                // Enter active jump chain state
+                activeChain = {
+                  currentNode: chosen.to,
+                  captured: captured,
+                  jumps: nextJumps
+                };
+                selectedNode = chosen.to;
+                btnFinishTurn.style.display = 'block';
+                showMoveDestinations(nextJumps);
+              } else {
+                // Single jump completed with no further options
+                selectedNode = null;
+                game.endTurn();
+                updateHUD();
+                const res = game.checkResult();
+                if (res !== 0) showGameOver(res);
+                else if (vsComputer && game.currentTurn === 2) triggerAIMove();
+              }
+            });
+          }
         }
       }
     });
@@ -723,7 +888,7 @@
           return;
         }
 
-        // AI prefers multi-jumps, then single jumps, then random steps
+        // AI selects best chain (prefers multi-jumps of any length/loop)
         moves.sort((a, b) => {
           if (b.captures.length !== a.captures.length) return b.captures.length - a.captures.length;
           return Math.random() - 0.5;
@@ -740,13 +905,14 @@
     }
 
     /* =========================================================================
-       6. UI HUD & CONTROLS
+       6. UI HUD, MODE TOGGLES, & RENDER LOOP
        ========================================================================= */
     const turnDot = document.getElementById('turn-dot');
     const turnText = document.getElementById('turn-text');
     const p1Score = document.getElementById('p1-score');
     const p2Score = document.getElementById('p2-score');
     const modal = document.getElementById('game-over-modal');
+    const legendBar = document.getElementById('legend-bar');
 
     function updateHUD() {
       p1Score.textContent = game.p1Count;
@@ -770,12 +936,16 @@
     }
 
     document.getElementById('btn-restart').onclick = () => {
+      activeChain = null;
+      btnFinishTurn.style.display = 'none';
       modal.style.display = 'none';
       game.reset();
       spawnAllPieces();
     };
 
     document.getElementById('modal-btn-restart').onclick = () => {
+      activeChain = null;
+      btnFinishTurn.style.display = 'none';
       modal.style.display = 'none';
       game.reset();
       spawnAllPieces();
@@ -785,8 +955,21 @@
     btnMode.onclick = () => {
       vsComputer = !vsComputer;
       btnMode.textContent = vsComputer ? 'Mode: vs Computer' : 'Mode: 2 Players';
+      activeChain = null;
+      btnFinishTurn.style.display = 'none';
       game.reset();
       spawnAllPieces();
+    };
+
+    const btnGuide = document.getElementById('btn-guide');
+    btnGuide.onclick = () => {
+      isGuided = !isGuided;
+      btnGuide.textContent = isGuided ? 'Guide: ON' : 'Guide: OFF';
+      legendBar.style.display = isGuided ? 'flex' : 'none';
+      clearHighlights();
+      if (selectedNode !== null && isGuided) {
+        showMoveDestinations(availableMoves);
+      }
     };
 
     window.addEventListener('resize', () => {
